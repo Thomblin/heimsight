@@ -15,7 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configuration via environment variables (`HEIMSIGHT_HOST`, `HEIMSIGHT_PORT`)
   - Graceful shutdown handling (SIGTERM/SIGINT)
   - Request tracing with `tower-http`
-- `shared` crate: Common types and utilities (placeholder)
+- `shared` crate: Common types and utilities
+  - `LogEntry` struct for log data with timestamp, level, message, service, attributes
+  - `LogLevel` enum (trace, debug, info, warn, error, fatal)
+  - Trace correlation fields (trace_id, span_id) for distributed tracing
+  - Validation for required fields (non-empty message and service)
+  - Builder pattern with `with_attribute()`, `with_trace_id()`, `with_span_id()`
 - `cli` crate: Command-line interface with basic structure
 - Project documentation: README.md, CHANGELOG.md, PROJECT.md
 - Development instructions: CLAUDE_INSTRUCTIONS.md

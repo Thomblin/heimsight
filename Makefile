@@ -14,6 +14,8 @@ build-release:
 # Run all tests
 test:
 	cargo test
+	cargo test -p api
+	cargo test -p heimsight
 
 # Run tests with output
 test-verbose:

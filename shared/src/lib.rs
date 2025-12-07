@@ -5,26 +5,31 @@
 //!
 //! # Modules
 //!
-//! - `models` - Data models for logs, metrics, and traces (coming soon)
+//! - [`models`] - Data models for logs, metrics, and traces
 //! - `storage` - Storage traits and implementations (coming soon)
 //! - `query` - Query parsing and execution (coming soon)
+//!
+//! # Example
+//!
+//! ```
+//! use shared::models::{LogEntry, LogLevel};
+//!
+//! let log = LogEntry::new(LogLevel::Info, "User logged in", "auth-service")
+//!     .with_attribute("user_id", "12345")
+//!     .with_trace_id("trace-abc");
+//!
+//! assert!(log.validate_entry().is_ok());
+//! ```
 
 #![deny(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
 
+pub mod models;
+
 /// Re-export common dependencies for convenience.
 pub use chrono;
 pub use serde;
 pub use serde_json;
 pub use validator;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_placeholder() {
-        // Placeholder test to verify the crate compiles
-        assert!(true);
-    }
-}
