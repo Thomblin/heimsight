@@ -460,18 +460,18 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 **Goal:** Accept OTLP data over HTTP.
 
 **Tasks:**
-- [x] Add `POST /v1/logs` (OTLP HTTP logs endpoint)
-- [x] Add `POST /v1/metrics` (OTLP HTTP metrics endpoint)
-- [x] Add `POST /v1/traces` (OTLP HTTP traces endpoint)
-- [x] Add examples/otlp_*.http files for manual testing
-- [x] Handle protobuf and JSON content types
-- [x] Convert OTLP to internal format and store
-- [x] Write integration tests with OTLP payloads
+- Add `POST /v1/logs` (OTLP HTTP logs endpoint)
+- Add `POST /v1/metrics` (OTLP HTTP metrics endpoint)
+- Add `POST /v1/traces` (OTLP HTTP traces endpoint)
+- Add examples/otlp_*.http files for manual testing
+- Handle protobuf and JSON content types
+- Convert OTLP to internal format and store
+- Write integration tests with OTLP payloads
 
 **Acceptance Criteria:**
-- [x] Standard OTLP exporters can send data
-- [x] Both protobuf and JSON formats work
-- [x] Data appears in internal stores
+- Standard OTLP exporters can send data
+- Both protobuf and JSON formats work
+- Data appears in internal stores
 
 **Implementation Notes:**
 - OTLP endpoints: `/v1/logs`, `/v1/metrics`, `/v1/traces`
