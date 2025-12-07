@@ -114,7 +114,8 @@ pub fn create_router(state: AppState) -> Router {
         .merge(routes::logs_routes(state.clone()))
         .merge(routes::query_routes(state.clone()))
         .merge(routes::metrics_routes(state.clone()))
-        .merge(routes::traces_routes(state))
+        .merge(routes::traces_routes(state.clone()))
+        .merge(routes::otlp_routes(state))
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TraceLayer::new_for_http())
 }

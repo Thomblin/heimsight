@@ -8,6 +8,7 @@ use axum::Router;
 mod health;
 mod logs;
 mod metrics;
+mod otlp;
 mod query;
 mod traces;
 
@@ -31,4 +32,9 @@ pub fn metrics_routes(state: AppState) -> Router {
 /// Creates traces routes with the given application state.
 pub fn traces_routes(state: AppState) -> Router {
     traces::traces_routes(state)
+}
+
+/// Creates OTLP routes with the given application state.
+pub fn otlp_routes(state: AppState) -> Router {
+    otlp::otlp_routes(state)
 }

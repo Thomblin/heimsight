@@ -3,6 +3,9 @@
 //! This module provides functions to convert OpenTelemetry Protocol (OTLP) data
 //! into the internal data models used by Heimsight.
 
+// Allow HashMap without generic hasher for cleaner API
+#![allow(clippy::implicit_hasher)]
+
 use crate::models::{
     HistogramBucket, HistogramData, LogEntry, LogLevel, Metric, MetricType, MetricValue, Span,
     SpanEvent, SpanKind, SpanStatus,
@@ -27,8 +30,7 @@ fn any_value_to_json(value: &proto::common::v1::AnyValue) -> serde_json::Value {
         Some(Value::BoolValue(b)) => serde_json::Value::Bool(*b),
         Some(Value::IntValue(i)) => serde_json::Value::Number((*i).into()),
         Some(Value::DoubleValue(d)) => serde_json::Number::from_f64(*d)
-            .map(serde_json::Value::Number)
-            .unwrap_or(serde_json::Value::Null),
+            .map_or(serde_json::Value::Null, serde_json::Value::Number),
         Some(Value::ArrayValue(arr)) => {
             let values: Vec<serde_json::Value> = arr.values.iter().map(any_value_to_json).collect();
             serde_json::Value::Array(values)
@@ -86,11 +88,11 @@ fn severity_to_log_level(severity: i32) -> LogLevel {
     match severity {
         1..=4 => LogLevel::Trace,
         5..=8 => LogLevel::Debug,
-        9..=12 => LogLevel::Info,
         13..=16 => LogLevel::Warn,
         17..=20 => LogLevel::Error,
         21..=24 => LogLevel::Fatal,
-        _ => LogLevel::Info, // Default
+        // Default to Info for 9..=12 and any other values
+        _ => LogLevel::Info,
     }
 }
 
@@ -105,6 +107,7 @@ fn severity_to_log_level(severity: i32) -> LogLevel {
 /// # Returns
 ///
 /// A `LogEntry` if conversion succeeds, `None` otherwise.
+#[must_use]
 pub fn otlp_log_to_log_entry(
     log_record: &proto::logs::v1::LogRecord,
     resource_attrs: &HashMap<String, serde_json::Value>,
@@ -158,16 +161,16 @@ pub fn otlp_log_to_log_entry(
     }
 
     // Extract trace context
-    let trace_id = if !log_record.trace_id.is_empty() {
-        Some(hex::encode(&log_record.trace_id))
-    } else {
+    let trace_id = if log_record.trace_id.is_empty() {
         None
+    } else {
+        Some(hex::encode(&log_record.trace_id))
     };
 
-    let span_id = if !log_record.span_id.is_empty() {
-        Some(hex::encode(&log_record.span_id))
-    } else {
+    let span_id = if log_record.span_id.is_empty() {
         None
+    } else {
+        Some(hex::encode(&log_record.span_id))
     };
 
     Some(LogEntry {
@@ -187,9 +190,8 @@ fn otlp_span_status_to_status(status: Option<&proto::trace::v1::Status>) -> Span
 
     match status {
         Some(s) => match StatusCode::try_from(s.code) {
-            Ok(StatusCode::Ok) | Ok(StatusCode::Unset) => SpanStatus::Ok,
             Ok(StatusCode::Error) => SpanStatus::Error,
-            Err(_) => SpanStatus::Ok,
+            Ok(StatusCode::Ok | StatusCode::Unset) | Err(_) => SpanStatus::Ok,
         },
         None => SpanStatus::Ok,
     }
@@ -200,16 +202,26 @@ fn otlp_span_kind_to_kind(kind: i32) -> SpanKind {
     use proto::trace::v1::span::SpanKind as OtlpSpanKind;
 
     match OtlpSpanKind::try_from(kind) {
-        Ok(OtlpSpanKind::Internal) | Ok(OtlpSpanKind::Unspecified) => SpanKind::Internal,
         Ok(OtlpSpanKind::Server) => SpanKind::Server,
         Ok(OtlpSpanKind::Client) => SpanKind::Client,
         Ok(OtlpSpanKind::Producer) => SpanKind::Producer,
         Ok(OtlpSpanKind::Consumer) => SpanKind::Consumer,
-        Err(_) => SpanKind::Internal,
+        Ok(OtlpSpanKind::Internal | OtlpSpanKind::Unspecified) | Err(_) => SpanKind::Internal,
     }
 }
 
 /// Converts OTLP `Span` to Heimsight `Span`.
+///
+/// # Arguments
+///
+/// * `otlp_span` - The OTLP span
+/// * `resource_attrs` - Resource attributes from the resource
+/// * `scope_name` - The instrumentation scope name (service name fallback)
+///
+/// # Returns
+///
+/// A `Span` if conversion succeeds, `None` otherwise.
+#[must_use]
 pub fn otlp_span_to_span(
     otlp_span: &proto::trace::v1::Span,
     resource_attrs: &HashMap<String, serde_json::Value>,
@@ -222,10 +234,10 @@ pub fn otlp_span_to_span(
     let trace_id = hex::encode(&otlp_span.trace_id);
     let span_id = hex::encode(&otlp_span.span_id);
 
-    let parent_span_id = if !otlp_span.parent_span_id.is_empty() {
-        Some(hex::encode(&otlp_span.parent_span_id))
-    } else {
+    let parent_span_id = if otlp_span.parent_span_id.is_empty() {
         None
+    } else {
+        Some(hex::encode(&otlp_span.parent_span_id))
     };
 
     let name = if otlp_span.name.is_empty() {
@@ -281,6 +293,7 @@ pub fn otlp_span_to_span(
 }
 
 /// Converts OTLP metric data point to Heimsight `Metric`.
+#[allow(clippy::cast_precision_loss)] // i64 to f64 precision loss is acceptable for metrics
 fn otlp_number_data_point_to_metric(
     name: &str,
     metric_type: MetricType,
@@ -333,7 +346,7 @@ fn otlp_histogram_data_point_to_metric(
     resource_attrs: &HashMap<String, serde_json::Value>,
     unit: &str,
     description: &str,
-) -> Option<Metric> {
+) -> Metric {
     let buckets: Vec<HistogramBucket> = data_point
         .explicit_bounds
         .iter()
@@ -376,20 +389,30 @@ fn otlp_histogram_data_point_to_metric(
         metric = metric.with_description(description);
     }
 
-    Some(metric)
+    metric
 }
 
 /// Converts OTLP metrics to Heimsight `Metric` vec.
+///
+/// # Arguments
+///
+/// * `otlp_metric` - The OTLP metric
+/// * `resource_attrs` - Resource attributes from the resource
+///
+/// # Returns
+///
+/// A vector of converted `Metric` values.
+#[must_use]
 pub fn otlp_metrics_to_metrics(
     otlp_metric: &proto::metrics::v1::Metric,
     resource_attrs: &HashMap<String, serde_json::Value>,
 ) -> Vec<Metric> {
+    use proto::metrics::v1::metric::Data;
+
     let mut metrics = Vec::new();
     let name = &otlp_metric.name;
     let unit = &otlp_metric.unit;
     let description = &otlp_metric.description;
-
-    use proto::metrics::v1::metric::Data;
 
     match &otlp_metric.data {
         Some(Data::Gauge(gauge)) => {
@@ -429,15 +452,14 @@ pub fn otlp_metrics_to_metrics(
         }
         Some(Data::Histogram(histogram)) => {
             for data_point in &histogram.data_points {
-                if let Some(metric) = otlp_histogram_data_point_to_metric(
+                let metric = otlp_histogram_data_point_to_metric(
                     name,
                     data_point,
                     resource_attrs,
                     unit,
                     description,
-                ) {
-                    metrics.push(metric);
-                }
+                );
+                metrics.push(metric);
             }
         }
         Some(Data::ExponentialHistogram(_)) => {

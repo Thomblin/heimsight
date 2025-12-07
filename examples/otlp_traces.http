@@ -1,0 +1,264 @@
+### OTLP Traces - JSON format (empty request)
+POST http://localhost:8080/v1/traces
+Content-Type: application/json
+
+{
+    "resourceSpans": []
+}
+
+### OTLP Traces - JSON format (single span)
+POST http://localhost:8080/v1/traces
+Content-Type: application/json
+
+{
+    "resourceSpans": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "api-gateway" }
+                    },
+                    {
+                        "key": "service.version",
+                        "value": { "stringValue": "1.0.0" }
+                    }
+                ]
+            },
+            "scopeSpans": [
+                {
+                    "scope": {
+                        "name": "http-tracer",
+                        "version": "1.0.0"
+                    },
+                    "spans": [
+                        {
+                            "traceId": "0102030405060708090a0b0c0d0e0f10",
+                            "spanId": "0102030405060708",
+                            "name": "GET /api/users",
+                            "kind": 2,
+                            "startTimeUnixNano": "1700000000000000000",
+                            "endTimeUnixNano": "1700000000050000000",
+                            "attributes": [
+                                {
+                                    "key": "http.method",
+                                    "value": { "stringValue": "GET" }
+                                },
+                                {
+                                    "key": "http.url",
+                                    "value": { "stringValue": "https://api.example.com/users" }
+                                },
+                                {
+                                    "key": "http.status_code",
+                                    "value": { "intValue": "200" }
+                                }
+                            ],
+                            "status": {
+                                "code": 1,
+                                "message": ""
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Traces - JSON format (distributed trace with parent-child spans)
+POST http://localhost:8080/v1/traces
+Content-Type: application/json
+
+{
+    "resourceSpans": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "api-gateway" }
+                    }
+                ]
+            },
+            "scopeSpans": [
+                {
+                    "scope": { "name": "http-tracer" },
+                    "spans": [
+                        {
+                            "traceId": "deadbeef12345678deadbeef12345678",
+                            "spanId": "1111111111111111",
+                            "name": "HTTP GET /api/orders",
+                            "kind": 2,
+                            "startTimeUnixNano": "1700000000000000000",
+                            "endTimeUnixNano": "1700000000100000000",
+                            "attributes": [
+                                {
+                                    "key": "http.method",
+                                    "value": { "stringValue": "GET" }
+                                }
+                            ],
+                            "status": { "code": 1 }
+                        },
+                        {
+                            "traceId": "deadbeef12345678deadbeef12345678",
+                            "spanId": "2222222222222222",
+                            "parentSpanId": "1111111111111111",
+                            "name": "validate-auth",
+                            "kind": 1,
+                            "startTimeUnixNano": "1700000000010000000",
+                            "endTimeUnixNano": "1700000000020000000",
+                            "attributes": [
+                                {
+                                    "key": "auth.method",
+                                    "value": { "stringValue": "jwt" }
+                                }
+                            ],
+                            "status": { "code": 1 }
+                        },
+                        {
+                            "traceId": "deadbeef12345678deadbeef12345678",
+                            "spanId": "3333333333333333",
+                            "parentSpanId": "1111111111111111",
+                            "name": "db.query",
+                            "kind": 3,
+                            "startTimeUnixNano": "1700000000025000000",
+                            "endTimeUnixNano": "1700000000075000000",
+                            "attributes": [
+                                {
+                                    "key": "db.system",
+                                    "value": { "stringValue": "postgresql" }
+                                },
+                                {
+                                    "key": "db.statement",
+                                    "value": { "stringValue": "SELECT * FROM orders WHERE user_id = ?" }
+                                }
+                            ],
+                            "status": { "code": 1 }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Traces - JSON format (span with events)
+POST http://localhost:8080/v1/traces
+Content-Type: application/json
+
+{
+    "resourceSpans": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "order-service" }
+                    }
+                ]
+            },
+            "scopeSpans": [
+                {
+                    "scope": { "name": "order-processor" },
+                    "spans": [
+                        {
+                            "traceId": "aabbccdd11223344aabbccdd11223344",
+                            "spanId": "aabbccdd11223344",
+                            "name": "process-order",
+                            "kind": 1,
+                            "startTimeUnixNano": "1700000000000000000",
+                            "endTimeUnixNano": "1700000000500000000",
+                            "attributes": [
+                                {
+                                    "key": "order.id",
+                                    "value": { "stringValue": "ORD-12345" }
+                                }
+                            ],
+                            "events": [
+                                {
+                                    "timeUnixNano": "1700000000100000000",
+                                    "name": "order.validated",
+                                    "attributes": [
+                                        {
+                                            "key": "validation.status",
+                                            "value": { "stringValue": "passed" }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "timeUnixNano": "1700000000300000000",
+                                    "name": "payment.processed",
+                                    "attributes": [
+                                        {
+                                            "key": "payment.method",
+                                            "value": { "stringValue": "credit_card" }
+                                        },
+                                        {
+                                            "key": "payment.amount",
+                                            "value": { "doubleValue": 99.99 }
+                                        }
+                                    ]
+                                }
+                            ],
+                            "status": { "code": 1 }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Traces - JSON format (span with error status)
+POST http://localhost:8080/v1/traces
+Content-Type: application/json
+
+{
+    "resourceSpans": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "payment-service" }
+                    }
+                ]
+            },
+            "scopeSpans": [
+                {
+                    "scope": { "name": "payment-processor" },
+                    "spans": [
+                        {
+                            "traceId": "error123456789012error123456789012",
+                            "spanId": "error123456789012",
+                            "name": "process-payment",
+                            "kind": 1,
+                            "startTimeUnixNano": "1700000000000000000",
+                            "endTimeUnixNano": "1700000000200000000",
+                            "attributes": [
+                                {
+                                    "key": "payment.id",
+                                    "value": { "stringValue": "PAY-99999" }
+                                },
+                                {
+                                    "key": "error.type",
+                                    "value": { "stringValue": "InsufficientFundsError" }
+                                }
+                            ],
+                            "status": {
+                                "code": 2,
+                                "message": "Payment failed: insufficient funds"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Traces - Protobuf format (use otel-cli or similar tool)
+# POST http://localhost:8080/v1/traces
+# Content-Type: application/x-protobuf
+#
+# (Binary protobuf data - use OpenTelemetry SDK or otel-cli to generate)

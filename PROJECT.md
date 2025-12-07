@@ -455,23 +455,30 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 3.2: OTLP HTTP Receiver
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Accept OTLP data over HTTP.
 
 **Tasks:**
-- Add `POST /v1/logs` (OTLP HTTP logs endpoint)
-- Add `POST /v1/metrics` (OTLP HTTP metrics endpoint)
-- Add `POST /v1/traces` (OTLP HTTP traces endpoint)
-- Add examples/otlp_*.http files for manual testing
-- Handle protobuf and JSON content types
-- Convert OTLP to internal format and store
-- Write integration tests with OTLP payloads
+- [x] Add `POST /v1/logs` (OTLP HTTP logs endpoint)
+- [x] Add `POST /v1/metrics` (OTLP HTTP metrics endpoint)
+- [x] Add `POST /v1/traces` (OTLP HTTP traces endpoint)
+- [x] Add examples/otlp_*.http files for manual testing
+- [x] Handle protobuf and JSON content types
+- [x] Convert OTLP to internal format and store
+- [x] Write integration tests with OTLP payloads
 
 **Acceptance Criteria:**
-- Standard OTLP exporters can send data
-- Both protobuf and JSON formats work
-- Data appears in internal stores
+- [x] Standard OTLP exporters can send data
+- [x] Both protobuf and JSON formats work
+- [x] Data appears in internal stores
+
+**Implementation Notes:**
+- OTLP endpoints: `/v1/logs`, `/v1/metrics`, `/v1/traces`
+- Content types: `application/x-protobuf` and `application/json`
+- Uses `pbjson` for proper protobuf-JSON encoding
+- Partial success responses for rejected items
+- Example files: `examples/otlp_*.http`
 
 ---
 

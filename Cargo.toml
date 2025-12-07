@@ -51,5 +51,12 @@ prost = "0.13"
 prost-types = "0.13"
 tonic = "0.12"
 
+# Encoding
+base64 = "0.22"
+
+# Protobuf JSON support
+pbjson = "0.7"
+pbjson-types = "0.7"
+
 # Internal crates
 shared = { path = "shared" }

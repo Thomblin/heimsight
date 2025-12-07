@@ -1,0 +1,179 @@
+### OTLP Metrics - JSON format (empty request)
+POST http://localhost:8080/v1/metrics
+Content-Type: application/json
+
+{
+    "resourceMetrics": []
+}
+
+### OTLP Metrics - JSON format (gauge metric)
+POST http://localhost:8080/v1/metrics
+Content-Type: application/json
+
+{
+    "resourceMetrics": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "my-service" }
+                    },
+                    {
+                        "key": "host.name",
+                        "value": { "stringValue": "server-01" }
+                    }
+                ]
+            },
+            "scopeMetrics": [
+                {
+                    "scope": {
+                        "name": "system-metrics",
+                        "version": "1.0.0"
+                    },
+                    "metrics": [
+                        {
+                            "name": "system.memory.usage",
+                            "description": "Current memory usage in bytes",
+                            "unit": "By",
+                            "gauge": {
+                                "dataPoints": [
+                                    {
+                                        "timeUnixNano": "1700000000000000000",
+                                        "asDouble": 8589934592,
+                                        "attributes": [
+                                            {
+                                                "key": "state",
+                                                "value": { "stringValue": "used" }
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Metrics - JSON format (counter metric)
+POST http://localhost:8080/v1/metrics
+Content-Type: application/json
+
+{
+    "resourceMetrics": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "api-server" }
+                    }
+                ]
+            },
+            "scopeMetrics": [
+                {
+                    "scope": { "name": "http-metrics" },
+                    "metrics": [
+                        {
+                            "name": "http.server.request_count",
+                            "description": "Total number of HTTP requests received",
+                            "unit": "1",
+                            "sum": {
+                                "dataPoints": [
+                                    {
+                                        "timeUnixNano": "1700000000000000000",
+                                        "asInt": "1523",
+                                        "attributes": [
+                                            {
+                                                "key": "http.method",
+                                                "value": { "stringValue": "GET" }
+                                            },
+                                            {
+                                                "key": "http.status_code",
+                                                "value": { "intValue": "200" }
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "timeUnixNano": "1700000000000000000",
+                                        "asInt": "45",
+                                        "attributes": [
+                                            {
+                                                "key": "http.method",
+                                                "value": { "stringValue": "POST" }
+                                            },
+                                            {
+                                                "key": "http.status_code",
+                                                "value": { "intValue": "201" }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "aggregationTemporality": 2,
+                                "isMonotonic": true
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Metrics - JSON format (histogram metric)
+POST http://localhost:8080/v1/metrics
+Content-Type: application/json
+
+{
+    "resourceMetrics": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "api-server" }
+                    }
+                ]
+            },
+            "scopeMetrics": [
+                {
+                    "scope": { "name": "http-metrics" },
+                    "metrics": [
+                        {
+                            "name": "http.server.duration",
+                            "description": "HTTP request duration in milliseconds",
+                            "unit": "ms",
+                            "histogram": {
+                                "dataPoints": [
+                                    {
+                                        "timeUnixNano": "1700000000000000000",
+                                        "count": "100",
+                                        "sum": 5234.5,
+                                        "bucketCounts": ["10", "25", "40", "20", "5"],
+                                        "explicitBounds": [10, 50, 100, 500],
+                                        "attributes": [
+                                            {
+                                                "key": "http.route",
+                                                "value": { "stringValue": "/api/users" }
+                                            }
+                                        ]
+                                    }
+                                ],
+                                "aggregationTemporality": 2
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Metrics - Protobuf format (use otel-cli or similar tool)
+# POST http://localhost:8080/v1/metrics
+# Content-Type: application/x-protobuf
+#
+# (Binary protobuf data - use OpenTelemetry SDK or otel-cli to generate)

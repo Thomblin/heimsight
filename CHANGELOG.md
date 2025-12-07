@@ -89,3 +89,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive test coverage for all conversion functions
   - Proper handling of resource attributes, trace context, and metric labels
   - Updated Makefile test target to skip doctests in generated protobuf code
+
+- **OTLP HTTP Receiver**
+  - `POST /v1/logs` endpoint for OTLP log ingestion
+  - `POST /v1/metrics` endpoint for OTLP metric ingestion
+  - `POST /v1/traces` endpoint for OTLP trace ingestion
+  - Support for both protobuf (`application/x-protobuf`) and JSON (`application/json`) content types
+  - Integrated `pbjson` for proper protobuf-JSON encoding (camelCase fields, string timestamps)
+  - Automatic conversion from OTLP format to internal Heimsight types
+  - Partial success responses indicating rejected items
+  - Added example files: `examples/otlp_logs.http`, `examples/otlp_metrics.http`, `examples/otlp_traces.http`
+  - Standard OpenTelemetry SDK exporters can now send data directly to Heimsight

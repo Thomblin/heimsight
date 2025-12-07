@@ -1,0 +1,114 @@
+### OTLP Logs - JSON format (empty request)
+POST http://localhost:8080/v1/logs
+Content-Type: application/json
+
+{
+    "resourceLogs": []
+}
+
+### OTLP Logs - JSON format (single log)
+POST http://localhost:8080/v1/logs
+Content-Type: application/json
+
+{
+    "resourceLogs": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "my-service" }
+                    },
+                    {
+                        "key": "service.version",
+                        "value": { "stringValue": "1.0.0" }
+                    }
+                ]
+            },
+            "scopeLogs": [
+                {
+                    "scope": {
+                        "name": "my-library",
+                        "version": "1.0.0"
+                    },
+                    "logRecords": [
+                        {
+                            "timeUnixNano": "1700000000000000000",
+                            "severityNumber": 9,
+                            "severityText": "INFO",
+                            "body": { "stringValue": "User logged in successfully" },
+                            "attributes": [
+                                {
+                                    "key": "user.id",
+                                    "value": { "intValue": "12345" }
+                                },
+                                {
+                                    "key": "request.id",
+                                    "value": { "stringValue": "abc-123-def" }
+                                }
+                            ],
+                            "traceId": "0102030405060708090a0b0c0d0e0f10",
+                            "spanId": "0102030405060708"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Logs - JSON format (multiple logs with different severity levels)
+POST http://localhost:8080/v1/logs
+Content-Type: application/json
+
+{
+    "resourceLogs": [
+        {
+            "resource": {
+                "attributes": [
+                    {
+                        "key": "service.name",
+                        "value": { "stringValue": "api-gateway" }
+                    }
+                ]
+            },
+            "scopeLogs": [
+                {
+                    "scope": { "name": "http" },
+                    "logRecords": [
+                        {
+                            "timeUnixNano": "1700000000000000000",
+                            "severityNumber": 5,
+                            "severityText": "DEBUG",
+                            "body": { "stringValue": "Request received: GET /api/users" }
+                        },
+                        {
+                            "timeUnixNano": "1700000001000000000",
+                            "severityNumber": 9,
+                            "severityText": "INFO",
+                            "body": { "stringValue": "Request processed successfully" }
+                        },
+                        {
+                            "timeUnixNano": "1700000002000000000",
+                            "severityNumber": 17,
+                            "severityText": "ERROR",
+                            "body": { "stringValue": "Database connection failed" },
+                            "attributes": [
+                                {
+                                    "key": "error.type",
+                                    "value": { "stringValue": "ConnectionError" }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+### OTLP Logs - Protobuf format (use otel-cli or similar tool)
+# POST http://localhost:8080/v1/logs
+# Content-Type: application/x-protobuf
+#
+# (Binary protobuf data - use OpenTelemetry SDK or otel-cli to generate)

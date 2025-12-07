@@ -12,6 +12,9 @@
 pub mod conversions;
 
 // Include the generated protobuf code
+#[allow(clippy::all)]
+#[allow(clippy::pedantic)]
+#[allow(missing_docs)]
 pub mod proto {
     //! Generated protobuf types from OTLP definitions.
 
@@ -19,8 +22,15 @@ pub mod proto {
         //! Common OTLP types.
         pub mod v1 {
             #![allow(clippy::all)]
+            #![allow(clippy::pedantic)]
             #![allow(missing_docs)]
             tonic::include_proto!("opentelemetry.proto.common.v1");
+
+            // Include pbjson-generated serde implementations
+            include!(concat!(
+                env!("OUT_DIR"),
+                "/opentelemetry.proto.common.v1.serde.rs"
+            ));
         }
     }
 
@@ -28,8 +38,14 @@ pub mod proto {
         //! Resource types.
         pub mod v1 {
             #![allow(clippy::all)]
+            #![allow(clippy::pedantic)]
             #![allow(missing_docs)]
             tonic::include_proto!("opentelemetry.proto.resource.v1");
+
+            include!(concat!(
+                env!("OUT_DIR"),
+                "/opentelemetry.proto.resource.v1.serde.rs"
+            ));
         }
     }
 
@@ -37,8 +53,14 @@ pub mod proto {
         //! Log types.
         pub mod v1 {
             #![allow(clippy::all)]
+            #![allow(clippy::pedantic)]
             #![allow(missing_docs)]
             tonic::include_proto!("opentelemetry.proto.logs.v1");
+
+            include!(concat!(
+                env!("OUT_DIR"),
+                "/opentelemetry.proto.logs.v1.serde.rs"
+            ));
         }
     }
 
@@ -46,8 +68,14 @@ pub mod proto {
         //! Metric types.
         pub mod v1 {
             #![allow(clippy::all)]
+            #![allow(clippy::pedantic)]
             #![allow(missing_docs)]
             tonic::include_proto!("opentelemetry.proto.metrics.v1");
+
+            include!(concat!(
+                env!("OUT_DIR"),
+                "/opentelemetry.proto.metrics.v1.serde.rs"
+            ));
         }
     }
 
@@ -55,8 +83,14 @@ pub mod proto {
         //! Trace types.
         pub mod v1 {
             #![allow(clippy::all)]
+            #![allow(clippy::pedantic)]
             #![allow(missing_docs)]
             tonic::include_proto!("opentelemetry.proto.trace.v1");
+
+            include!(concat!(
+                env!("OUT_DIR"),
+                "/opentelemetry.proto.trace.v1.serde.rs"
+            ));
         }
     }
 
@@ -67,8 +101,14 @@ pub mod proto {
             //! Log collector service.
             pub mod v1 {
                 #![allow(clippy::all)]
+                #![allow(clippy::pedantic)]
                 #![allow(missing_docs)]
                 tonic::include_proto!("opentelemetry.proto.collector.logs.v1");
+
+                include!(concat!(
+                    env!("OUT_DIR"),
+                    "/opentelemetry.proto.collector.logs.v1.serde.rs"
+                ));
             }
         }
 
@@ -76,8 +116,14 @@ pub mod proto {
             //! Metrics collector service.
             pub mod v1 {
                 #![allow(clippy::all)]
+                #![allow(clippy::pedantic)]
                 #![allow(missing_docs)]
                 tonic::include_proto!("opentelemetry.proto.collector.metrics.v1");
+
+                include!(concat!(
+                    env!("OUT_DIR"),
+                    "/opentelemetry.proto.collector.metrics.v1.serde.rs"
+                ));
             }
         }
 
@@ -85,8 +131,14 @@ pub mod proto {
             //! Trace collector service.
             pub mod v1 {
                 #![allow(clippy::all)]
+                #![allow(clippy::pedantic)]
                 #![allow(missing_docs)]
                 tonic::include_proto!("opentelemetry.proto.collector.trace.v1");
+
+                include!(concat!(
+                    env!("OUT_DIR"),
+                    "/opentelemetry.proto.collector.trace.v1.serde.rs"
+                ));
             }
         }
     }
