@@ -2,6 +2,6 @@
 //!
 //! This module contains the core data structures for logs, metrics, and traces.
 
-mod log;
+pub mod log;
 
-pub use log::{LogEntry, LogLevel};
+pub use log::{LogEntry, LogLevel, LogValidationError};

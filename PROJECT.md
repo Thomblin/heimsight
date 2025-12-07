@@ -250,7 +250,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 1.4: Log Ingestion Endpoint
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Accept logs via HTTP POST.
 
@@ -280,6 +280,8 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add methods: insert, query (by time range), count
 - Wire into API server
 - Add basic query endpoint `GET /api/v1/logs`
+- Add examples/post_logs.http for manual testing
+- Add examples/get_logs.http for manual testing
 - Support query params: start_time, end_time, limit
 
 **Acceptance Criteria:**

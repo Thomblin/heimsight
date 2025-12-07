@@ -34,6 +34,7 @@ pub use config::Config;
 use anyhow::Result;
 use axum::Router;
 use tokio::net::TcpListener;
+use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
 /// Runs the Heimsight API server.
@@ -84,12 +85,17 @@ pub async fn run_server_with_config(config: Config) -> Result<()> {
     Ok(())
 }
 
+/// Maximum request body size (10 MB).
+const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
+
 /// Creates the main application router with all routes and middleware.
 ///
 /// This function is public to allow testing the router without starting a full server.
 pub fn create_router() -> Router {
     Router::new()
         .merge(routes::health_routes())
+        .merge(routes::logs_routes())
+        .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TraceLayer::new_for_http())
 }
 

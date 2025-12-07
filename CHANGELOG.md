@@ -10,8 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial project scaffolding with Rust workspace structure
-- `api` crate: Axum-based API server with health check endpoint
+- `api` crate: Axum-based API server with health check and log ingestion
   - `GET /health` endpoint returning service status, name, and version
+  - `POST /api/v1/logs` endpoint for log ingestion (single or batch)
+  - Request validation with detailed error responses
+  - Request body size limit (10 MB)
   - Configuration via environment variables (`HEIMSIGHT_HOST`, `HEIMSIGHT_PORT`)
   - Graceful shutdown handling (SIGTERM/SIGINT)
   - Request tracing with `tower-http`
@@ -24,4 +27,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `cli` crate: Command-line interface with basic structure
 - Project documentation: README.md, CHANGELOG.md, PROJECT.md
 - Development instructions: CLAUDE_INSTRUCTIONS.md
-- `examples/health.http` for manual API testing
+- `examples/health.http` and `examples/logs.http` for manual API testing
+- `Makefile` with common development commands
