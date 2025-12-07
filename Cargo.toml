@@ -46,5 +46,10 @@ clap = { version = "4", features = ["derive", "env"] }
 tokio-test = "0.4"
 http-body-util = "0.1"
 
+# OTLP and protobuf
+prost = "0.13"
+prost-types = "0.13"
+tonic = "0.12"
+
 # Internal crates
 shared = { path = "shared" }

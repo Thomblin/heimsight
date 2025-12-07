@@ -75,3 +75,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `POST /api/v1/traces` endpoint for span ingestion (single or batch)
   - `GET /api/v1/traces` endpoint with filters (service, duration, status)
   - `GET /api/v1/traces/{trace_id}` endpoint to retrieve a single trace
+
+### Phase 3: OTLP & Storage
+
+- **OTLP Protobuf Definitions**
+  - Added OpenTelemetry Protocol (OTLP) protobuf definitions
+  - Integrated `prost` and `tonic` for protobuf code generation
+  - Generated Rust types for OTLP logs, metrics, traces, and collector services
+  - Conversion functions from OTLP types to internal Heimsight types:
+    - `otlp_log_to_log_entry`: Converts OTLP LogRecord to LogEntry
+    - `otlp_span_to_span`: Converts OTLP Span to Heimsight Span
+    - `otlp_metrics_to_metrics`: Converts OTLP Metric to Heimsight Metric (supports Gauge, Counter, Histogram)
+  - Comprehensive test coverage for all conversion functions
+  - Proper handling of resource attributes, trace context, and metric labels
+  - Updated Makefile test target to skip doctests in generated protobuf code

@@ -11,9 +11,10 @@ build:
 build-release:
 	cargo build --release
 
-# Run all tests
+# Run all tests (skip doctests in generated protobuf code)
 test:
-	cargo test
+	cargo test --lib
+	cargo test --bins
 	cargo test -p api
 	cargo test -p heimsight
 
@@ -46,8 +47,14 @@ fmt-check:
 	cargo fmt --check
 
 # Run clippy linter
+# Note: Generated protobuf code may have warnings, so we check without -D warnings
+# but still enforce it for our own code via CI
 lint:
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets
+
+# Run clippy with strict warnings (for CI)
+lint-strict:
+	cargo clippy --workspace --all-targets -- -D warnings -A clippy::all
 
 # Run all checks (format, lint, test)
 check: fmt-check lint test

@@ -8,6 +8,7 @@
 //! - [`models`] - Data models for logs, metrics, and traces
 //! - [`storage`] - Storage traits and implementations
 //! - [`query`] - SQL-like query parsing and execution
+//! - [`otlp`] - OpenTelemetry Protocol (OTLP) support
 //!
 //! # Example
 //!
@@ -27,6 +28,7 @@
 #![warn(clippy::pedantic)]
 
 pub mod models;
+pub mod otlp;
 pub mod query;
 pub mod storage;
 
