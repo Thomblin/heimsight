@@ -1,0 +1,24 @@
+[package]
+name = "heimsight"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Heimsight CLI - command-line interface for the observability platform"
+
+[[bin]]
+name = "heimsight"
+path = "src/main.rs"
+
+[dependencies]
+shared = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }

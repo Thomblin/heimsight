@@ -1,0 +1,49 @@
+[workspace]
+resolver = "2"
+members = ["api", "shared", "cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Heimsight Contributors"]
+license = "MIT"
+repository = "https://github.com/your-org/heimsight"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Configuration
+dotenvy = "0.15"
+
+# Validation
+validator = { version = "0.20", features = ["derive"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Testing
+tokio-test = "0.4"
+
+# Internal crates
+shared = { path = "shared" }
