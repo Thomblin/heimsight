@@ -22,3 +22,4 @@ dotenvy = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
+http-body-util = { workspace = true }

@@ -208,13 +208,14 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 1.2: Basic Axum Server
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Running HTTP server with health check endpoint.
 
 **Tasks:**
 - Set up Axum with Tokio runtime in `api/`
 - Add `/health` endpoint returning 200 OK
+- Add examples/health.http for manual testing
 - Add basic configuration (host, port) via environment
 - Add `tracing` for structured logging
 - Write integration test for health endpoint

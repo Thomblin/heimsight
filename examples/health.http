@@ -1,0 +1,15 @@
+# Heimsight API - Health Check Examples
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+
+@baseUrl = 
+
+### Health Check
+# Returns service health status
+GET http://localhost:8080/health
+Accept: application/json
+
+### Health Check (alternative port)
+# Use when running on custom port
+# @port = 3000
+# GET http://localhost:{{port}}/health
+# Accept: application/json

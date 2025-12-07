@@ -44,6 +44,7 @@ clap = { version = "4", features = ["derive", "env"] }
 
 # Testing
 tokio-test = "0.4"
+http-body-util = "0.1"
 
 # Internal crates
 shared = { path = "shared" }
