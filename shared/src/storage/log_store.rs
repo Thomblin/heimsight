@@ -357,9 +357,7 @@ mod tests {
     fn test_query_with_limit() {
         let store = InMemoryLogStore::new();
         for i in 0..10 {
-            store
-                .insert(create_test_log(&format!("Log {}", i)))
-                .unwrap();
+            store.insert(create_test_log(&format!("Log {i}"))).unwrap();
         }
 
         let result = store.query(LogQuery::new().with_limit(5)).unwrap();
@@ -372,9 +370,7 @@ mod tests {
     fn test_query_with_offset() {
         let store = InMemoryLogStore::new();
         for i in 0..10 {
-            store
-                .insert(create_test_log(&format!("Log {}", i)))
-                .unwrap();
+            store.insert(create_test_log(&format!("Log {i}"))).unwrap();
         }
 
         let result = store.query(LogQuery::new().with_offset(5)).unwrap();
@@ -388,9 +384,7 @@ mod tests {
     fn test_query_with_limit_and_offset() {
         let store = InMemoryLogStore::new();
         for i in 0..10 {
-            store
-                .insert(create_test_log(&format!("Log {}", i)))
-                .unwrap();
+            store.insert(create_test_log(&format!("Log {i}"))).unwrap();
         }
 
         let result = store
@@ -495,7 +489,7 @@ mod tests {
             let store_clone = Arc::clone(&store);
             let handle = thread::spawn(move || {
                 store_clone
-                    .insert(create_test_log(&format!("Thread {} log", i)))
+                    .insert(create_test_log(&format!("Thread {i} log")))
                     .unwrap();
             });
             handles.push(handle);
@@ -689,16 +683,12 @@ mod tests {
 
         for i in 0..10 {
             store
-                .insert(LogEntry::new(
-                    LogLevel::Error,
-                    format!("Error {}", i),
-                    "api",
-                ))
+                .insert(LogEntry::new(LogLevel::Error, format!("Error {i}"), "api"))
                 .unwrap();
         }
         for i in 0..5 {
             store
-                .insert(LogEntry::new(LogLevel::Info, format!("Info {}", i), "api"))
+                .insert(LogEntry::new(LogLevel::Info, format!("Info {i}"), "api"))
                 .unwrap();
         }
 

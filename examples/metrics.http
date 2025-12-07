@@ -1,0 +1,166 @@
+# Heimsight API - Metrics Examples
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+
+@baseUrl = http://localhost:8080
+
+###############################################################################
+# METRIC INGESTION (POST /api/v1/metrics)
+###############################################################################
+
+### Ingest Single Counter Metric
+POST {{baseUrl}}/api/v1/metrics
+Content-Type: application/json
+
+{
+    "name": "http_requests_total",
+    "metric_type": "counter",
+    "value": 1234,
+    "labels": {
+        "method": "GET",
+        "path": "/api/users",
+        "status": "200"
+    }
+}
+
+### Ingest Single Gauge Metric
+POST {{baseUrl}}/api/v1/metrics
+Content-Type: application/json
+
+{
+    "name": "cpu_usage_percent",
+    "metric_type": "gauge",
+    "value": 75.5,
+    "labels": {
+        "host": "server-01",
+        "core": "0"
+    },
+    "unit": "percent",
+    "description": "CPU usage percentage"
+}
+
+### Ingest Minimal Metric (defaults to gauge)
+POST {{baseUrl}}/api/v1/metrics
+Content-Type: application/json
+
+{
+    "name": "temperature",
+    "value": 23.5
+}
+
+### Ingest Batch of Metrics
+POST {{baseUrl}}/api/v1/metrics
+Content-Type: application/json
+
+[
+    {
+        "name": "http_requests_total",
+        "metric_type": "counter",
+        "value": 100,
+        "labels": {"method": "GET", "status": "200"}
+    },
+    {
+        "name": "http_requests_total",
+        "metric_type": "counter",
+        "value": 50,
+        "labels": {"method": "POST", "status": "201"}
+    },
+    {
+        "name": "http_requests_total",
+        "metric_type": "counter",
+        "value": 5,
+        "labels": {"method": "GET", "status": "500"}
+    },
+    {
+        "name": "memory_usage_bytes",
+        "metric_type": "gauge",
+        "value": 1073741824,
+        "labels": {"host": "server-01"},
+        "unit": "bytes"
+    },
+    {
+        "name": "memory_usage_bytes",
+        "metric_type": "gauge",
+        "value": 2147483648,
+        "labels": {"host": "server-02"},
+        "unit": "bytes"
+    }
+]
+
+### Ingest System Metrics Batch
+POST {{baseUrl}}/api/v1/metrics
+Content-Type: application/json
+
+[
+    {"name": "cpu_usage", "value": 45.2, "labels": {"host": "web-01"}},
+    {"name": "cpu_usage", "value": 62.8, "labels": {"host": "web-02"}},
+    {"name": "cpu_usage", "value": 38.1, "labels": {"host": "db-01"}},
+    {"name": "disk_usage_percent", "value": 72.5, "labels": {"host": "web-01", "mount": "/"}},
+    {"name": "disk_usage_percent", "value": 45.0, "labels": {"host": "db-01", "mount": "/data"}}
+]
+
+###############################################################################
+# METRIC QUERIES (GET /api/v1/metrics)
+###############################################################################
+
+### Query All Metrics
+GET {{baseUrl}}/api/v1/metrics
+
+### Query Metrics by Name
+GET {{baseUrl}}/api/v1/metrics?name=http_requests_total
+
+### Query Metrics by Type
+GET {{baseUrl}}/api/v1/metrics?metric_type=counter
+
+### Query Gauge Metrics
+GET {{baseUrl}}/api/v1/metrics?metric_type=gauge
+
+### Query with Limit
+GET {{baseUrl}}/api/v1/metrics?limit=10
+
+### Query with Limit and Offset
+GET {{baseUrl}}/api/v1/metrics?limit=10&offset=5
+
+### Query with Name and Limit
+GET {{baseUrl}}/api/v1/metrics?name=cpu_usage&limit=5
+
+###############################################################################
+# METRIC AGGREGATIONS
+###############################################################################
+
+### Aggregate: Sum of all metric values
+GET {{baseUrl}}/api/v1/metrics?aggregate=sum
+
+### Aggregate: Average of all metric values
+GET {{baseUrl}}/api/v1/metrics?aggregate=avg
+
+### Aggregate: Minimum value
+GET {{baseUrl}}/api/v1/metrics?aggregate=min
+
+### Aggregate: Maximum value
+GET {{baseUrl}}/api/v1/metrics?aggregate=max
+
+### Aggregate: Count of metrics
+GET {{baseUrl}}/api/v1/metrics?aggregate=count
+
+### Aggregate: Average CPU usage
+GET {{baseUrl}}/api/v1/metrics?name=cpu_usage&aggregate=avg
+
+### Aggregate: Sum of HTTP requests
+GET {{baseUrl}}/api/v1/metrics?name=http_requests_total&aggregate=sum
+
+### Aggregate: Max memory usage
+GET {{baseUrl}}/api/v1/metrics?name=memory_usage_bytes&aggregate=max
+
+###############################################################################
+# ERROR CASES
+###############################################################################
+
+### Error: Empty batch
+POST {{baseUrl}}/api/v1/metrics
+Content-Type: application/json
+
+[]
+
+### Error: Invalid aggregation function
+GET {{baseUrl}}/api/v1/metrics?aggregate=invalid
+

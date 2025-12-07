@@ -111,7 +111,10 @@ const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .merge(routes::health_routes())
-        .merge(routes::logs_routes(state))
+        .merge(routes::logs_routes(state.clone()))
+        .merge(routes::query_routes(state.clone()))
+        .merge(routes::metrics_routes(state.clone()))
+        .merge(routes::traces_routes(state))
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TraceLayer::new_for_http())
 }

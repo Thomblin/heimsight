@@ -1,0 +1,165 @@
+# Heimsight API - SQL-Like Query Examples
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+
+@baseUrl = http://localhost:8080
+
+###############################################################################
+# SQL-LIKE QUERIES (POST /api/v1/query)
+###############################################################################
+
+### Simple SELECT all logs
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs"
+}
+
+### Query with WHERE clause - filter by level
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE level = 'error'"
+}
+
+### Query with WHERE clause - filter by service
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE service = 'api'"
+}
+
+### Query with CONTAINS (case-insensitive message search)
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE message CONTAINS 'failed'"
+}
+
+### Query with AND condition
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE level = 'error' AND service = 'api'"
+}
+
+### Query with OR condition
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE level = 'error' OR level = 'fatal'"
+}
+
+### Query with grouped conditions (parentheses)
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE (level = 'error' OR level = 'warn') AND service = 'api'"
+}
+
+### Query with comparison operators
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE level >= 'warn'"
+}
+
+### Query with STARTS WITH
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE message STARTS WITH 'Error:'"
+}
+
+### Query with ENDS WITH
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE message ENDS WITH 'failed'"
+}
+
+### Query with ORDER BY (descending - newest first)
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs ORDER BY timestamp DESC"
+}
+
+### Query with ORDER BY (ascending - oldest first)
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs ORDER BY timestamp ASC"
+}
+
+### Query with LIMIT
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs LIMIT 10"
+}
+
+### Query with LIMIT and OFFSET (pagination)
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs LIMIT 10 OFFSET 20"
+}
+
+### Full query with all clauses
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE level = 'error' AND service = 'api' ORDER BY timestamp DESC LIMIT 50"
+}
+
+### Complex query with multiple conditions
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM logs WHERE (level = 'error' OR level = 'fatal') AND service = 'db-service' AND message CONTAINS 'connection' ORDER BY timestamp DESC LIMIT 100"
+}
+
+###############################################################################
+# ERROR CASES
+###############################################################################
+
+### Error: Invalid syntax (missing *)
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT FROM logs"
+}
+
+### Error: Empty query
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": ""
+}
+
+### Error: Unsupported source (metrics not yet supported in query)
+POST {{baseUrl}}/api/v1/query
+Content-Type: application/json
+
+{
+    "query": "SELECT * FROM metrics"
+}
+

@@ -7,7 +7,7 @@
 //!
 //! - [`models`] - Data models for logs, metrics, and traces
 //! - [`storage`] - Storage traits and implementations
-//! - `query` - Query parsing and execution (coming soon)
+//! - [`query`] - SQL-like query parsing and execution
 //!
 //! # Example
 //!
@@ -27,6 +27,7 @@
 #![warn(clippy::pedantic)]
 
 pub mod models;
+pub mod query;
 pub mod storage;
 
 /// Re-export common dependencies for convenience.

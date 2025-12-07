@@ -315,7 +315,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ### Phase 2: Core Features
 
 #### Step 2.1: SQL-Like Query Parser
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Parse SQL-like queries for logs.
 
@@ -335,7 +335,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 2.2: Query Execution Engine
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Execute parsed queries against log store.
 
@@ -355,7 +355,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 2.3: Metrics Data Model
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Define data structures for metrics.
 
@@ -375,7 +375,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 2.4: Metrics Ingestion & Query
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Ingest and query metrics.
 
@@ -394,7 +394,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 2.5: Trace Data Model
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Define data structures for distributed traces.
 
@@ -414,7 +414,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 2.6: Trace Ingestion & Query
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Ingest and query traces.
 

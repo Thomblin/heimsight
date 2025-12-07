@@ -526,7 +526,7 @@ mod tests {
     async fn test_ingest_invalid_json() {
         let app = create_test_router();
 
-        let body = r#"{ invalid json }"#;
+        let body = r"{ invalid json }";
 
         let response = app
             .oneshot(
@@ -552,7 +552,7 @@ mod tests {
     async fn test_ingest_empty_batch() {
         let app = create_test_router();
 
-        let body = r#"[]"#;
+        let body = r"[]";
 
         let response = app
             .oneshot(
@@ -671,7 +671,7 @@ mod tests {
 
         // Insert multiple logs
         for i in 0..10 {
-            let log = LogEntry::new(LogLevel::Info, format!("Log {}", i), "test-service");
+            let log = LogEntry::new(LogLevel::Info, format!("Log {i}"), "test-service");
             state.log_store().insert(log).unwrap();
         }
 
@@ -703,7 +703,7 @@ mod tests {
 
         // Insert multiple logs
         for i in 0..10 {
-            let log = LogEntry::new(LogLevel::Info, format!("Log {}", i), "test-service");
+            let log = LogEntry::new(LogLevel::Info, format!("Log {i}"), "test-service");
             state.log_store().insert(log).unwrap();
         }
 
@@ -781,10 +781,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method("GET")
-                    .uri(&format!(
-                        "/api/v1/logs?start_time={}&end_time={}",
-                        start, end
-                    ))
+                    .uri(format!("/api/v1/logs?start_time={start}&end_time={end}"))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1082,17 +1079,13 @@ mod tests {
         for i in 0..10 {
             state
                 .log_store()
-                .insert(LogEntry::new(
-                    LogLevel::Error,
-                    format!("Error {}", i),
-                    "api",
-                ))
+                .insert(LogEntry::new(LogLevel::Error, format!("Error {i}"), "api"))
                 .unwrap();
         }
         for i in 0..5 {
             state
                 .log_store()
-                .insert(LogEntry::new(LogLevel::Info, format!("Info {}", i), "api"))
+                .insert(LogEntry::new(LogLevel::Info, format!("Info {i}"), "api"))
                 .unwrap();
         }
 

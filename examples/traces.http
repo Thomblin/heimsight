@@ -1,0 +1,231 @@
+# Heimsight API - Traces Examples
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+
+@baseUrl = http://localhost:8080
+
+###############################################################################
+# SPAN INGESTION (POST /api/v1/traces)
+###############################################################################
+
+### Ingest Single Root Span
+POST {{baseUrl}}/api/v1/traces
+Content-Type: application/json
+
+{
+    "trace_id": "abc123def456",
+    "span_id": "span-001",
+    "name": "HTTP GET /api/users",
+    "service": "api-gateway",
+    "kind": "server",
+    "status": "ok",
+    "duration_ms": 150,
+    "attributes": {
+        "http.method": "GET",
+        "http.url": "/api/users",
+        "http.status_code": 200
+    }
+}
+
+### Ingest Child Span (with parent)
+POST {{baseUrl}}/api/v1/traces
+Content-Type: application/json
+
+{
+    "trace_id": "abc123def456",
+    "span_id": "span-002",
+    "parent_span_id": "span-001",
+    "name": "SELECT users FROM database",
+    "service": "user-service",
+    "kind": "client",
+    "status": "ok",
+    "duration_ms": 45,
+    "attributes": {
+        "db.system": "postgresql",
+        "db.statement": "SELECT * FROM users WHERE active = true"
+    }
+}
+
+### Ingest Complete Trace (batch of spans)
+POST {{baseUrl}}/api/v1/traces
+Content-Type: application/json
+
+[
+    {
+        "trace_id": "trace-request-001",
+        "span_id": "span-root",
+        "name": "HTTP POST /api/orders",
+        "service": "api-gateway",
+        "kind": "server",
+        "status": "ok",
+        "duration_ms": 250,
+        "attributes": {
+            "http.method": "POST",
+            "http.status_code": 201,
+            "user_id": "user-123"
+        }
+    },
+    {
+        "trace_id": "trace-request-001",
+        "span_id": "span-auth",
+        "parent_span_id": "span-root",
+        "name": "Authenticate user",
+        "service": "auth-service",
+        "kind": "internal",
+        "status": "ok",
+        "duration_ms": 15
+    },
+    {
+        "trace_id": "trace-request-001",
+        "span_id": "span-validate",
+        "parent_span_id": "span-root",
+        "name": "Validate order",
+        "service": "order-service",
+        "kind": "internal",
+        "status": "ok",
+        "duration_ms": 25
+    },
+    {
+        "trace_id": "trace-request-001",
+        "span_id": "span-db",
+        "parent_span_id": "span-validate",
+        "name": "INSERT INTO orders",
+        "service": "order-service",
+        "kind": "client",
+        "status": "ok",
+        "duration_ms": 80,
+        "attributes": {
+            "db.system": "postgresql"
+        }
+    },
+    {
+        "trace_id": "trace-request-001",
+        "span_id": "span-queue",
+        "parent_span_id": "span-root",
+        "name": "Publish order.created event",
+        "service": "order-service",
+        "kind": "producer",
+        "status": "ok",
+        "duration_ms": 10,
+        "attributes": {
+            "messaging.system": "rabbitmq",
+            "messaging.destination": "orders.created"
+        }
+    }
+]
+
+### Ingest Failed Trace
+POST {{baseUrl}}/api/v1/traces
+Content-Type: application/json
+
+[
+    {
+        "trace_id": "trace-error-001",
+        "span_id": "span-root",
+        "name": "HTTP GET /api/products/999",
+        "service": "api-gateway",
+        "kind": "server",
+        "status": "error",
+        "duration_ms": 500,
+        "attributes": {
+            "http.method": "GET",
+            "http.status_code": 500,
+            "error.message": "Internal server error"
+        }
+    },
+    {
+        "trace_id": "trace-error-001",
+        "span_id": "span-db",
+        "parent_span_id": "span-root",
+        "name": "SELECT * FROM products",
+        "service": "product-service",
+        "kind": "client",
+        "status": "error",
+        "duration_ms": 450,
+        "attributes": {
+            "db.system": "postgresql",
+            "error.message": "Connection timeout"
+        }
+    }
+]
+
+### Ingest Multiple Traces
+POST {{baseUrl}}/api/v1/traces
+Content-Type: application/json
+
+[
+    {"trace_id": "fast-trace", "span_id": "s1", "name": "Fast request", "service": "api", "duration_ms": 10},
+    {"trace_id": "medium-trace", "span_id": "s2", "name": "Medium request", "service": "api", "duration_ms": 100},
+    {"trace_id": "slow-trace", "span_id": "s3", "name": "Slow request", "service": "api", "duration_ms": 1000},
+    {"trace_id": "slow-trace", "span_id": "s4", "parent_span_id": "s3", "name": "DB query", "service": "db", "duration_ms": 900}
+]
+
+###############################################################################
+# TRACE QUERIES (GET /api/v1/traces)
+###############################################################################
+
+### Query All Traces
+GET {{baseUrl}}/api/v1/traces
+
+### Query Traces by Service
+GET {{baseUrl}}/api/v1/traces?service=api-gateway
+
+### Query Traces by Service (database)
+GET {{baseUrl}}/api/v1/traces?service=order-service
+
+### Query Slow Traces (min duration)
+GET {{baseUrl}}/api/v1/traces?min_duration_ms=100
+
+### Query Fast Traces (max duration)
+GET {{baseUrl}}/api/v1/traces?max_duration_ms=50
+
+### Query Traces in Duration Range
+GET {{baseUrl}}/api/v1/traces?min_duration_ms=50&max_duration_ms=200
+
+### Query with Limit
+GET {{baseUrl}}/api/v1/traces?limit=5
+
+### Query with Limit and Offset
+GET {{baseUrl}}/api/v1/traces?limit=5&offset=0
+
+### Combined Query: Service + Duration + Limit
+GET {{baseUrl}}/api/v1/traces?service=api&min_duration_ms=100&limit=10
+
+###############################################################################
+# GET SINGLE TRACE (GET /api/v1/traces/{trace_id})
+###############################################################################
+
+### Get Trace by ID
+GET {{baseUrl}}/api/v1/traces/trace-request-001
+
+### Get Error Trace by ID
+GET {{baseUrl}}/api/v1/traces/trace-error-001
+
+### Get Fast Trace by ID
+GET {{baseUrl}}/api/v1/traces/fast-trace
+
+### Get Slow Trace by ID
+GET {{baseUrl}}/api/v1/traces/slow-trace
+
+### Error: Trace Not Found
+GET {{baseUrl}}/api/v1/traces/nonexistent-trace-id
+
+###############################################################################
+# ERROR CASES
+###############################################################################
+
+### Error: Empty batch
+POST {{baseUrl}}/api/v1/traces
+Content-Type: application/json
+
+[]
+
+### Error: Missing required field (trace_id)
+POST {{baseUrl}}/api/v1/traces
+Content-Type: application/json
+
+{
+    "span_id": "span-001",
+    "name": "Test",
+    "service": "api"
+}
+

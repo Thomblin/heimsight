@@ -45,3 +45,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Development instructions: CLAUDE_INSTRUCTIONS.md
 - `examples/health.http` and `examples/logs.http` for manual API testing
 - `Makefile` with common development commands
+
+### Phase 2: Core Features
+
+- **SQL-like Query Parser and Executor**
+  - `POST /api/v1/query` endpoint for SQL-like queries
+  - Supports: `SELECT * FROM logs WHERE level = 'error' AND service = 'api'`
+  - WHERE clauses with AND, OR, parentheses for grouping
+  - Comparison operators: =, !=, <, >, <=, >=, CONTAINS, STARTS WITH, ENDS WITH
+  - ORDER BY with ASC/DESC
+  - LIMIT and OFFSET for pagination
+  - Query AST returned in response for transparency
+
+- **Metrics Data Model and API**
+  - `Metric` struct with name, type, value, timestamp, labels
+  - `MetricType` enum: Counter, Gauge, Histogram
+  - `MetricValue` supporting simple values and histogram data
+  - `MetricStore` trait and `InMemoryMetricStore` implementation
+  - `POST /api/v1/metrics` endpoint for metric ingestion (single or batch)
+  - `GET /api/v1/metrics` endpoint with filters (name, type, labels)
+  - Aggregation support: sum, avg, min, max, count
+
+- **Trace Data Model and API**
+  - `Span` struct with trace_id, span_id, parent_span_id, name, service, timestamps, attributes
+  - `SpanKind` enum: Internal, Server, Client, Producer, Consumer
+  - `SpanStatus` enum: Ok, Error, Cancelled
+  - `Trace` struct for grouping spans by trace_id
+  - `TraceStore` trait and `InMemoryTraceStore` implementation
+  - `POST /api/v1/traces` endpoint for span ingestion (single or batch)
+  - `GET /api/v1/traces` endpoint with filters (service, duration, status)
+  - `GET /api/v1/traces/{trace_id}` endpoint to retrieve a single trace
