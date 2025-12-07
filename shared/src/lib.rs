@@ -6,7 +6,7 @@
 //! # Modules
 //!
 //! - [`models`] - Data models for logs, metrics, and traces
-//! - `storage` - Storage traits and implementations (coming soon)
+//! - [`storage`] - Storage traits and implementations
 //! - `query` - Query parsing and execution (coming soon)
 //!
 //! # Example
@@ -27,6 +27,7 @@
 #![warn(clippy::pedantic)]
 
 pub mod models;
+pub mod storage;
 
 /// Re-export common dependencies for convenience.
 pub use chrono;

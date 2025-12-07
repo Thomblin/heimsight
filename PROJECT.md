@@ -270,7 +270,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 1.5: In-Memory Storage
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Store logs in memory for querying (temporary, MVP only).
 

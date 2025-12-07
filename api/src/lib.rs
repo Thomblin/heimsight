@@ -28,8 +28,10 @@
 
 mod config;
 mod routes;
+mod state;
 
 pub use config::Config;
+pub use state::AppState;
 
 use anyhow::Result;
 use axum::Router;
@@ -51,7 +53,8 @@ use tower_http::trace::TraceLayer;
 /// - A fatal error occurs during operation
 pub async fn run_server() -> Result<()> {
     let config = Config::from_env()?;
-    run_server_with_config(config).await
+    let state = AppState::with_in_memory_store();
+    run_server_with_config_and_state(config, state).await
 }
 
 /// Runs the Heimsight API server with the provided configuration.
@@ -64,6 +67,20 @@ pub async fn run_server() -> Result<()> {
 /// - The server fails to bind to the configured address
 /// - A fatal error occurs during operation
 pub async fn run_server_with_config(config: Config) -> Result<()> {
+    let state = AppState::with_in_memory_store();
+    run_server_with_config_and_state(config, state).await
+}
+
+/// Runs the Heimsight API server with the provided configuration and state.
+///
+/// This is useful for testing or when you want to provide configuration programmatically.
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - The server fails to bind to the configured address
+/// - A fatal error occurs during operation
+pub async fn run_server_with_config_and_state(config: Config, state: AppState) -> Result<()> {
     let addr = config.socket_addr();
 
     tracing::info!(
@@ -72,7 +89,7 @@ pub async fn run_server_with_config(config: Config) -> Result<()> {
         "Heimsight API server starting"
     );
 
-    let app = create_router();
+    let app = create_router(state);
     let listener = TcpListener::bind(addr).await?;
 
     tracing::info!(%addr, "Listening for connections");
@@ -91,10 +108,10 @@ const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 /// Creates the main application router with all routes and middleware.
 ///
 /// This function is public to allow testing the router without starting a full server.
-pub fn create_router() -> Router {
+pub fn create_router(state: AppState) -> Router {
     Router::new()
         .merge(routes::health_routes())
-        .merge(routes::logs_routes())
+        .merge(routes::logs_routes(state))
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TraceLayer::new_for_http())
 }
@@ -135,9 +152,13 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
+    fn create_test_router() -> Router {
+        create_router(AppState::with_in_memory_store())
+    }
+
     #[tokio::test]
     async fn test_health_endpoint_returns_200() {
-        let app = create_router();
+        let app = create_test_router();
 
         let response = app
             .oneshot(
@@ -154,7 +175,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_endpoint_returns_json() {
-        let app = create_router();
+        let app = create_test_router();
 
         let response = app
             .oneshot(

@@ -1,10 +1,18 @@
-//! Log ingestion endpoints.
+//! Log ingestion and query endpoints.
 //!
-//! Provides HTTP endpoints for ingesting log data into Heimsight.
+//! Provides HTTP endpoints for ingesting and querying log data in Heimsight.
 
-use axum::{extract::rejection::JsonRejection, http::StatusCode, routing::post, Json, Router};
+use crate::state::AppState;
+use axum::{
+    extract::{rejection::JsonRejection, Query, State},
+    http::StatusCode,
+    routing::post,
+    Json, Router,
+};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use shared::models::{LogEntry, LogLevel};
+use shared::storage::LogQuery;
 use std::collections::HashMap;
 
 /// Request body for log ingestion - can be a single log or a batch.
@@ -95,16 +103,69 @@ pub struct ValidationErrorDetail {
     pub message: String,
 }
 
-/// Creates the log ingestion routes.
-pub fn logs_routes() -> Router {
-    Router::new().route("/api/v1/logs", post(ingest_logs))
+/// Query parameters for log retrieval.
+#[derive(Debug, Deserialize)]
+pub struct LogQueryParams {
+    /// Filter logs starting from this time (inclusive).
+    pub start_time: Option<DateTime<Utc>>,
+
+    /// Filter logs up to this time (exclusive).
+    pub end_time: Option<DateTime<Utc>>,
+
+    /// Maximum number of logs to return (default: 100, max: 1000).
+    pub limit: Option<usize>,
+
+    /// Number of logs to skip (for pagination).
+    pub offset: Option<usize>,
 }
+
+/// Response for log queries.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LogQueryResponse {
+    /// The logs matching the query.
+    pub logs: Vec<LogEntry>,
+
+    /// Total count of matching logs (before limit/offset applied).
+    pub total_count: usize,
+
+    /// Number of logs returned in this response.
+    pub returned_count: usize,
+
+    /// Limit used for this query.
+    pub limit: usize,
+
+    /// Offset used for this query.
+    pub offset: usize,
+}
+
+/// Generic API error response.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ApiError {
+    /// Error type.
+    pub error: String,
+    /// Detailed error message.
+    pub message: String,
+}
+
+/// Creates the log routes with application state.
+pub fn logs_routes(state: AppState) -> Router {
+    Router::new()
+        .route("/api/v1/logs", post(ingest_logs).get(query_logs))
+        .with_state(state)
+}
+
+/// Maximum limit for log queries.
+const MAX_QUERY_LIMIT: usize = 1000;
+
+/// Default limit for log queries.
+const DEFAULT_QUERY_LIMIT: usize = 100;
 
 /// Handler for log ingestion.
 ///
 /// Accepts either a single log entry or a batch of log entries.
 /// Returns 201 Created on success, 400 Bad Request on validation failure.
 async fn ingest_logs(
+    State(state): State<AppState>,
     payload: Result<Json<LogIngestRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<LogIngestResponse>), (StatusCode, Json<LogIngestError>)> {
     // Handle JSON parsing errors
@@ -176,10 +237,21 @@ async fn ingest_logs(
         ));
     }
 
-    // TODO: Actually store the logs (Step 1.5)
-    // For now, we just accept them and log
+    // Store the logs
     let count = valid_entries.len();
-    tracing::debug!(count = count, "Accepted log entries");
+    if let Err(e) = state.log_store().insert_batch(valid_entries) {
+        tracing::error!(error = %e, "Failed to store logs");
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(LogIngestError {
+                error: "storage_error".to_string(),
+                message: "Failed to store logs".to_string(),
+                details: None,
+            }),
+        ));
+    }
+
+    tracing::debug!(count = count, "Stored log entries");
 
     Ok((
         StatusCode::CREATED,
@@ -194,6 +266,51 @@ async fn ingest_logs(
     ))
 }
 
+/// Handler for log queries.
+///
+/// Returns logs matching the provided query parameters.
+async fn query_logs(
+    State(state): State<AppState>,
+    Query(params): Query<LogQueryParams>,
+) -> Result<Json<LogQueryResponse>, (StatusCode, Json<ApiError>)> {
+    // Apply defaults and limits
+    let limit = params
+        .limit
+        .unwrap_or(DEFAULT_QUERY_LIMIT)
+        .min(MAX_QUERY_LIMIT);
+    let offset = params.offset.unwrap_or(0);
+
+    // Build the query
+    let mut query = LogQuery::new().with_limit(limit).with_offset(offset);
+
+    if let Some(start) = params.start_time {
+        query = query.with_start_time(start);
+    }
+    if let Some(end) = params.end_time {
+        query = query.with_end_time(end);
+    }
+
+    // Execute the query
+    let result = state.log_store().query(query).map_err(|e| {
+        tracing::error!(error = %e, "Failed to query logs");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiError {
+                error: "storage_error".to_string(),
+                message: "Failed to query logs".to_string(),
+            }),
+        )
+    })?;
+
+    Ok(Json(LogQueryResponse {
+        returned_count: result.logs.len(),
+        logs: result.logs,
+        total_count: result.total_count,
+        limit,
+        offset,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,7 +320,13 @@ mod tests {
     use tower::ServiceExt;
 
     fn create_test_router() -> Router {
-        logs_routes()
+        logs_routes(AppState::with_in_memory_store())
+    }
+
+    fn create_test_router_with_state() -> (Router, AppState) {
+        let state = AppState::with_in_memory_store();
+        let router = logs_routes(state.clone());
+        (router, state)
     }
 
     #[tokio::test]
@@ -462,5 +585,246 @@ mod tests {
         assert_eq!(details.len(), 2); // Two entries failed validation
         assert_eq!(details[0].index, 1);
         assert_eq!(details[1].index, 2);
+    }
+
+    // ========== Query endpoint tests ==========
+
+    #[tokio::test]
+    async fn test_query_empty_store() {
+        let app = create_test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.logs.len(), 0);
+        assert_eq!(result.total_count, 0);
+        assert_eq!(result.returned_count, 0);
+    }
+
+    #[tokio::test]
+    async fn test_query_returns_ingested_logs() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert some logs directly into the store
+        let log = LogEntry::new(LogLevel::Info, "Test message", "test-service");
+        state.log_store().insert(log).unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.logs.len(), 1);
+        assert_eq!(result.total_count, 1);
+        assert_eq!(result.logs[0].message, "Test message");
+    }
+
+    #[tokio::test]
+    async fn test_query_with_limit() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert multiple logs
+        for i in 0..10 {
+            let log = LogEntry::new(LogLevel::Info, format!("Log {}", i), "test-service");
+            state.log_store().insert(log).unwrap();
+        }
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?limit=5")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.logs.len(), 5);
+        assert_eq!(result.returned_count, 5);
+        assert_eq!(result.total_count, 10);
+        assert_eq!(result.limit, 5);
+    }
+
+    #[tokio::test]
+    async fn test_query_with_offset() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert multiple logs
+        for i in 0..10 {
+            let log = LogEntry::new(LogLevel::Info, format!("Log {}", i), "test-service");
+            state.log_store().insert(log).unwrap();
+        }
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?offset=5")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.logs.len(), 5);
+        assert_eq!(result.offset, 5);
+        assert_eq!(result.total_count, 10);
+    }
+
+    #[tokio::test]
+    async fn test_query_limit_capped_at_max() {
+        let app = create_test_router();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?limit=5000")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.limit, MAX_QUERY_LIMIT);
+    }
+
+    #[tokio::test]
+    async fn test_query_with_time_range() {
+        let (app, state) = create_test_router_with_state();
+
+        let now = Utc::now();
+        let one_hour_ago = now - chrono::Duration::hours(1);
+
+        // Insert a log with a specific timestamp
+        let log = LogEntry {
+            timestamp: one_hour_ago,
+            level: LogLevel::Info,
+            message: "Old log".to_string(),
+            service: "test-service".to_string(),
+            attributes: HashMap::new(),
+            trace_id: None,
+            span_id: None,
+        };
+        state.log_store().insert(log).unwrap();
+
+        // Query with time range that includes the log
+        // Use URL encoding for the timestamps
+        let start_str = (now - chrono::Duration::hours(2)).to_rfc3339();
+        let end_str = now.to_rfc3339();
+        let start = urlencoding::encode(&start_str);
+        let end = urlencoding::encode(&end_str);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(&format!(
+                        "/api/v1/logs?start_time={}&end_time={}",
+                        start, end
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 1);
+    }
+
+    #[tokio::test]
+    async fn test_logs_persist_in_memory() {
+        let (app, _state) = create_test_router_with_state();
+
+        // First, ingest a log
+        let ingest_body = r#"{
+            "message": "Persisted log",
+            "service": "test-service"
+        }"#;
+
+        let ingest_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/logs")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(ingest_body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(ingest_response.status(), StatusCode::CREATED);
+
+        // Then query to verify it's stored
+        let query_response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(query_response.status(), StatusCode::OK);
+
+        let body = query_response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 1);
+        assert_eq!(result.logs[0].message, "Persisted log");
     }
 }
