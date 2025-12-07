@@ -112,6 +112,16 @@ pub struct LogQueryParams {
     /// Filter logs up to this time (exclusive).
     pub end_time: Option<DateTime<Utc>>,
 
+    /// Filter by log level.
+    pub level: Option<LogLevel>,
+
+    /// Filter by service name (exact match).
+    pub service: Option<String>,
+
+    /// Filter by message content (case-insensitive substring match).
+    #[serde(alias = "message_contains")]
+    pub contains: Option<String>,
+
     /// Maximum number of logs to return (default: 100, max: 1000).
     pub limit: Option<usize>,
 
@@ -283,11 +293,23 @@ async fn query_logs(
     // Build the query
     let mut query = LogQuery::new().with_limit(limit).with_offset(offset);
 
+    // Time range filters
     if let Some(start) = params.start_time {
         query = query.with_start_time(start);
     }
     if let Some(end) = params.end_time {
         query = query.with_end_time(end);
+    }
+
+    // Content filters
+    if let Some(level) = params.level {
+        query = query.with_level(level);
+    }
+    if let Some(service) = params.service {
+        query = query.with_service(service);
+    }
+    if let Some(contains) = params.contains {
+        query = query.with_message_contains(contains);
     }
 
     // Execute the query
@@ -826,5 +848,301 @@ mod tests {
 
         assert_eq!(result.total_count, 1);
         assert_eq!(result.logs[0].message, "Persisted log");
+    }
+
+    // ========== Filter endpoint tests ==========
+
+    #[tokio::test]
+    async fn test_query_filter_by_level() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert logs with different levels
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Debug, "Debug log", "svc"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "Info log", "svc"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Error, "Error log", "svc"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Error, "Another error", "svc"))
+            .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?level=error")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result.logs.iter().all(|l| l.level == LogLevel::Error));
+    }
+
+    #[tokio::test]
+    async fn test_query_filter_by_service() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert logs from different services
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "API log", "api"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "Auth log", "auth-service"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "Another API log", "api"))
+            .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?service=api")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result.logs.iter().all(|l| l.service == "api"));
+    }
+
+    #[tokio::test]
+    async fn test_query_filter_by_message_contains() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert logs with different messages
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "User logged in", "auth"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(
+                LogLevel::Info,
+                "Payment processed",
+                "payment",
+            ))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "User logged out", "auth"))
+            .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?contains=user")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result
+            .logs
+            .iter()
+            .all(|l| l.message.to_lowercase().contains("user")));
+    }
+
+    #[tokio::test]
+    async fn test_query_filter_message_contains_case_insensitive() {
+        let (app, state) = create_test_router_with_state();
+
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "ERROR occurred", "svc"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "error in module", "svc"))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "No problems here", "svc"))
+            .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?contains=ERROR")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 2);
+    }
+
+    #[tokio::test]
+    async fn test_query_combined_filters() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert logs with various combinations
+        state
+            .log_store()
+            .insert(LogEntry::new(
+                LogLevel::Error,
+                "Database connection failed",
+                "db-service",
+            ))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(
+                LogLevel::Error,
+                "Auth token expired",
+                "auth-service",
+            ))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(
+                LogLevel::Info,
+                "Database query completed",
+                "db-service",
+            ))
+            .unwrap();
+        state
+            .log_store()
+            .insert(LogEntry::new(
+                LogLevel::Error,
+                "Database timeout",
+                "db-service",
+            ))
+            .unwrap();
+
+        // Query: errors from db-service containing "database"
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?level=error&service=db-service&contains=database")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result.logs.iter().all(|l| l.level == LogLevel::Error
+            && l.service == "db-service"
+            && l.message.to_lowercase().contains("database")));
+    }
+
+    #[tokio::test]
+    async fn test_query_filter_with_pagination() {
+        let (app, state) = create_test_router_with_state();
+
+        // Insert 10 error logs and 5 info logs
+        for i in 0..10 {
+            state
+                .log_store()
+                .insert(LogEntry::new(
+                    LogLevel::Error,
+                    format!("Error {}", i),
+                    "api",
+                ))
+                .unwrap();
+        }
+        for i in 0..5 {
+            state
+                .log_store()
+                .insert(LogEntry::new(LogLevel::Info, format!("Info {}", i), "api"))
+                .unwrap();
+        }
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?level=error&limit=3&offset=2")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 10); // Total errors before pagination
+        assert_eq!(result.logs.len(), 3); // After limit
+        assert_eq!(result.logs[0].message, "Error 2"); // After offset
+    }
+
+    #[tokio::test]
+    async fn test_query_filter_no_matches() {
+        let (app, state) = create_test_router_with_state();
+
+        state
+            .log_store()
+            .insert(LogEntry::new(LogLevel::Info, "Some message", "svc"))
+            .unwrap();
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/logs?level=fatal")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let result: LogQueryResponse = serde_json::from_slice(&body).unwrap();
+
+        assert_eq!(result.total_count, 0);
+        assert!(result.logs.is_empty());
     }
 }

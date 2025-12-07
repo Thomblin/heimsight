@@ -3,7 +3,7 @@
 //! Provides the `LogStore` trait for abstracting log storage operations
 //! and an `InMemoryLogStore` implementation for development and testing.
 
-use crate::models::LogEntry;
+use crate::models::{LogEntry, LogLevel};
 use chrono::{DateTime, Utc};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -28,6 +28,15 @@ pub struct LogQuery {
 
     /// Filter logs up to this time (exclusive).
     pub end_time: Option<DateTime<Utc>>,
+
+    /// Filter by log level.
+    pub level: Option<LogLevel>,
+
+    /// Filter by service name (exact match).
+    pub service: Option<String>,
+
+    /// Filter by message content (case-insensitive substring match).
+    pub message_contains: Option<String>,
 
     /// Maximum number of logs to return.
     pub limit: Option<usize>,
@@ -68,6 +77,27 @@ impl LogQuery {
     #[must_use]
     pub fn with_offset(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
+        self
+    }
+
+    /// Sets the log level filter.
+    #[must_use]
+    pub fn with_level(mut self, level: LogLevel) -> Self {
+        self.level = Some(level);
+        self
+    }
+
+    /// Sets the service name filter (exact match).
+    #[must_use]
+    pub fn with_service(mut self, service: impl Into<String>) -> Self {
+        self.service = Some(service.into());
+        self
+    }
+
+    /// Sets the message contains filter (case-insensitive substring match).
+    #[must_use]
+    pub fn with_message_contains(mut self, pattern: impl Into<String>) -> Self {
+        self.message_contains = Some(pattern.into());
         self
     }
 }
@@ -186,10 +216,14 @@ impl LogStore for InMemoryLogStore {
     fn query(&self, query: LogQuery) -> Result<LogQueryResult, LogStoreError> {
         let logs = self.logs.read().map_err(|_| LogStoreError::LockError)?;
 
-        // Filter by time range
+        // Prepare case-insensitive message search pattern
+        let message_pattern = query.message_contains.as_ref().map(|s| s.to_lowercase());
+
+        // Apply all filters
         let filtered: Vec<LogEntry> = logs
             .iter()
             .filter(|log| {
+                // Time range filter
                 if let Some(start) = query.start_time {
                     if log.timestamp < start {
                         return false;
@@ -200,6 +234,28 @@ impl LogStore for InMemoryLogStore {
                         return false;
                     }
                 }
+
+                // Level filter
+                if let Some(ref level) = query.level {
+                    if &log.level != level {
+                        return false;
+                    }
+                }
+
+                // Service filter (exact match)
+                if let Some(ref service) = query.service {
+                    if &log.service != service {
+                        return false;
+                    }
+                }
+
+                // Message contains filter (case-insensitive)
+                if let Some(ref pattern) = message_pattern {
+                    if !log.message.to_lowercase().contains(pattern) {
+                        return false;
+                    }
+                }
+
                 true
             })
             .cloned()
@@ -472,6 +528,246 @@ mod tests {
 
         assert!(query.start_time.is_some());
         assert!(query.end_time.is_some());
+        assert_eq!(query.limit, Some(100));
+        assert_eq!(query.offset, Some(10));
+    }
+
+    // ========== Filter tests ==========
+
+    fn create_test_log_with_level(message: &str, level: LogLevel) -> LogEntry {
+        LogEntry::new(level, message, "test-service")
+    }
+
+    fn create_test_log_with_service(message: &str, service: &str) -> LogEntry {
+        LogEntry::new(LogLevel::Info, message, service)
+    }
+
+    #[test]
+    fn test_query_filter_by_level() {
+        let store = InMemoryLogStore::new();
+
+        store
+            .insert(create_test_log_with_level("Debug message", LogLevel::Debug))
+            .unwrap();
+        store
+            .insert(create_test_log_with_level("Info message", LogLevel::Info))
+            .unwrap();
+        store
+            .insert(create_test_log_with_level("Error message", LogLevel::Error))
+            .unwrap();
+        store
+            .insert(create_test_log_with_level("Another error", LogLevel::Error))
+            .unwrap();
+
+        let result = store
+            .query(LogQuery::new().with_level(LogLevel::Error))
+            .unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result.logs.iter().all(|l| l.level == LogLevel::Error));
+    }
+
+    #[test]
+    fn test_query_filter_by_service() {
+        let store = InMemoryLogStore::new();
+
+        store
+            .insert(create_test_log_with_service("Log from api", "api"))
+            .unwrap();
+        store
+            .insert(create_test_log_with_service(
+                "Log from auth",
+                "auth-service",
+            ))
+            .unwrap();
+        store
+            .insert(create_test_log_with_service("Another api log", "api"))
+            .unwrap();
+        store
+            .insert(create_test_log_with_service("Database log", "db-service"))
+            .unwrap();
+
+        let result = store.query(LogQuery::new().with_service("api")).unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result.logs.iter().all(|l| l.service == "api"));
+    }
+
+    #[test]
+    fn test_query_filter_by_message_contains() {
+        let store = InMemoryLogStore::new();
+
+        store.insert(create_test_log("User logged in")).unwrap();
+        store
+            .insert(create_test_log("Payment processed successfully"))
+            .unwrap();
+        store.insert(create_test_log("User logged out")).unwrap();
+        store
+            .insert(create_test_log("Database connection failed"))
+            .unwrap();
+
+        let result = store
+            .query(LogQuery::new().with_message_contains("user"))
+            .unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result
+            .logs
+            .iter()
+            .all(|l| l.message.to_lowercase().contains("user")));
+    }
+
+    #[test]
+    fn test_query_filter_message_contains_case_insensitive() {
+        let store = InMemoryLogStore::new();
+
+        store.insert(create_test_log("ERROR occurred")).unwrap();
+        store.insert(create_test_log("Error in module")).unwrap();
+        store.insert(create_test_log("error message")).unwrap();
+        store.insert(create_test_log("No problems here")).unwrap();
+
+        let result = store
+            .query(LogQuery::new().with_message_contains("ERROR"))
+            .unwrap();
+
+        assert_eq!(result.total_count, 3);
+    }
+
+    #[test]
+    fn test_query_combined_filters() {
+        let store = InMemoryLogStore::new();
+
+        // Insert logs with various combinations
+        store
+            .insert(LogEntry::new(
+                LogLevel::Error,
+                "Database connection failed",
+                "db-service",
+            ))
+            .unwrap();
+        store
+            .insert(LogEntry::new(
+                LogLevel::Error,
+                "Auth token expired",
+                "auth-service",
+            ))
+            .unwrap();
+        store
+            .insert(LogEntry::new(
+                LogLevel::Info,
+                "Database query completed",
+                "db-service",
+            ))
+            .unwrap();
+        store
+            .insert(LogEntry::new(
+                LogLevel::Error,
+                "Database timeout",
+                "db-service",
+            ))
+            .unwrap();
+
+        // Query: errors from db-service containing "database"
+        let result = store
+            .query(
+                LogQuery::new()
+                    .with_level(LogLevel::Error)
+                    .with_service("db-service")
+                    .with_message_contains("database"),
+            )
+            .unwrap();
+
+        assert_eq!(result.total_count, 2);
+        assert!(result.logs.iter().all(|l| l.level == LogLevel::Error
+            && l.service == "db-service"
+            && l.message.to_lowercase().contains("database")));
+    }
+
+    #[test]
+    fn test_query_filter_with_pagination() {
+        let store = InMemoryLogStore::new();
+
+        for i in 0..10 {
+            store
+                .insert(LogEntry::new(
+                    LogLevel::Error,
+                    format!("Error {}", i),
+                    "api",
+                ))
+                .unwrap();
+        }
+        for i in 0..5 {
+            store
+                .insert(LogEntry::new(LogLevel::Info, format!("Info {}", i), "api"))
+                .unwrap();
+        }
+
+        let result = store
+            .query(
+                LogQuery::new()
+                    .with_level(LogLevel::Error)
+                    .with_limit(3)
+                    .with_offset(2),
+            )
+            .unwrap();
+
+        assert_eq!(result.total_count, 10); // Total errors before pagination
+        assert_eq!(result.logs.len(), 3); // After limit
+        assert_eq!(result.logs[0].message, "Error 2"); // After offset
+    }
+
+    #[test]
+    fn test_query_filter_no_matches() {
+        let store = InMemoryLogStore::new();
+
+        store.insert(create_test_log("Some message")).unwrap();
+        store.insert(create_test_log("Another message")).unwrap();
+
+        let result = store
+            .query(LogQuery::new().with_level(LogLevel::Fatal))
+            .unwrap();
+
+        assert_eq!(result.total_count, 0);
+        assert!(result.logs.is_empty());
+    }
+
+    #[test]
+    fn test_query_filter_service_exact_match() {
+        let store = InMemoryLogStore::new();
+
+        store
+            .insert(create_test_log_with_service("Log", "api"))
+            .unwrap();
+        store
+            .insert(create_test_log_with_service("Log", "api-gateway"))
+            .unwrap();
+        store
+            .insert(create_test_log_with_service("Log", "internal-api"))
+            .unwrap();
+
+        // Should only match exact "api", not "api-gateway" or "internal-api"
+        let result = store.query(LogQuery::new().with_service("api")).unwrap();
+
+        assert_eq!(result.total_count, 1);
+        assert_eq!(result.logs[0].service, "api");
+    }
+
+    #[test]
+    fn test_query_builder_with_all_filters() {
+        let query = LogQuery::new()
+            .with_start_time(Utc::now() - Duration::hours(1))
+            .with_end_time(Utc::now())
+            .with_level(LogLevel::Error)
+            .with_service("api")
+            .with_message_contains("failed")
+            .with_limit(100)
+            .with_offset(10);
+
+        assert!(query.start_time.is_some());
+        assert!(query.end_time.is_some());
+        assert_eq!(query.level, Some(LogLevel::Error));
+        assert_eq!(query.service, Some("api".to_string()));
+        assert_eq!(query.message_contains, Some("failed".to_string()));
         assert_eq!(query.limit, Some(100));
         assert_eq!(query.offset, Some(10));
     }

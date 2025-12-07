@@ -293,7 +293,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 1.6: Simple Log Query API
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Query logs with filters.
 
