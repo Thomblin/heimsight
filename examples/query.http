@@ -20,7 +20,7 @@ POST {{baseUrl}}/api/v1/query
 Content-Type: application/json
 
 {
-    "query": "SELECT * FROM logs WHERE level = 'error'"
+    "query": "SELECT * FROM logs WHERE level = 'debug'"
 }
 
 ### Query with WHERE clause - filter by service

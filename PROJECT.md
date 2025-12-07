@@ -463,6 +463,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add `POST /v1/logs` (OTLP HTTP logs endpoint)
 - Add `POST /v1/metrics` (OTLP HTTP metrics endpoint)
 - Add `POST /v1/traces` (OTLP HTTP traces endpoint)
+- Add examples/otlp_*.http files for manual testing
 - Handle protobuf and JSON content types
 - Convert OTLP to internal format and store
 - Write integration tests with OTLP payloads
