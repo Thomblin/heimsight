@@ -1,6 +1,7 @@
 #!/bin/bash
 # Test OTLP endpoints with telemetrygen
 # Usage: ./scripts/test-otlp.sh [traces|logs|metrics|all]
+# see https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/cmd/telemetrygen
 
 set -e
 
