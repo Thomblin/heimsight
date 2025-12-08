@@ -13,10 +13,7 @@ build-release:
 
 # Run all tests (skip doctests in generated protobuf code)
 test:
-	cargo test --lib
-	cargo test --bins
-	cargo test -p api
-	cargo test -p heimsight
+	cargo test
 
 # Run tests with output
 test-verbose:
