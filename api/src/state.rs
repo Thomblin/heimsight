@@ -3,7 +3,8 @@
 //! Defines the shared application state that is passed to route handlers.
 
 use shared::storage::{
-    InMemoryLogStore, InMemoryMetricStore, InMemoryTraceStore, LogStore, MetricStore, TraceStore,
+    ClickHouseLogStore, ClickHouseMetricStore, ClickHouseTraceStore, InMemoryLogStore,
+    InMemoryMetricStore, InMemoryTraceStore, LogStore, MetricStore, TraceStore,
 };
 use std::sync::Arc;
 
@@ -45,6 +46,18 @@ impl AppState {
             log_store: Arc::new(InMemoryLogStore::new()),
             metric_store: Arc::new(InMemoryMetricStore::new()),
             trace_store: Arc::new(InMemoryTraceStore::new()),
+        }
+    }
+
+    /// Creates a new application state with ClickHouse-backed stores.
+    ///
+    /// This is used for production deployments with persistent storage.
+    #[must_use]
+    pub fn with_clickhouse_store(client: Arc<clickhouse::Client>) -> Self {
+        Self {
+            log_store: Arc::new(ClickHouseLogStore::new(Arc::clone(&client))),
+            metric_store: Arc::new(ClickHouseMetricStore::new(Arc::clone(&client))),
+            trace_store: Arc::new(ClickHouseTraceStore::new(client)),
         }
     }
 

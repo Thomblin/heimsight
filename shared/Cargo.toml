@@ -22,6 +22,9 @@ hex = "0.4.3"
 base64 = { workspace = true }
 pbjson = { workspace = true }
 pbjson-types = { workspace = true }
+clickhouse = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }

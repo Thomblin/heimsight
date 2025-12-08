@@ -347,6 +347,314 @@ impl MetricStore for InMemoryMetricStore {
     }
 }
 
+/// ClickHouse-backed metric store implementation.
+///
+/// This implementation stores metrics in ClickHouse for production use.
+/// It provides persistent storage and efficient time-series queries with aggregation.
+#[derive(Clone)]
+pub struct ClickHouseMetricStore {
+    client: Arc<clickhouse::Client>,
+}
+
+impl ClickHouseMetricStore {
+    /// Creates a new ClickHouse metric store with the given client.
+    #[must_use]
+    pub fn new(client: Arc<clickhouse::Client>) -> Self {
+        Self { client }
+    }
+
+    /// Creates a new ClickHouse metric store wrapped in an Arc.
+    #[must_use]
+    pub fn new_shared(client: Arc<clickhouse::Client>) -> Arc<Self> {
+        Arc::new(Self::new(client))
+    }
+
+    /// Helper to execute async operations synchronously.
+    fn block_on<F, T>(&self, future: F) -> Result<T, MetricStoreError>
+    where
+        F: std::future::Future<Output = Result<T, clickhouse::error::Error>>,
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(future)
+                .map_err(|e| MetricStoreError::StorageError(e.to_string()))
+        })
+    }
+}
+
+impl MetricStore for ClickHouseMetricStore {
+    fn insert(&self, metric: Metric) -> Result<(), MetricStoreError> {
+        self.insert_batch(vec![metric])
+    }
+
+    fn insert_batch(&self, metrics: Vec<Metric>) -> Result<(), MetricStoreError> {
+        if metrics.is_empty() {
+            return Ok(());
+        }
+
+        let client = Arc::clone(&self.client);
+        self.block_on(async move {
+            #[derive(clickhouse::Row, serde::Serialize)]
+            struct MetricRow {
+                timestamp: i64,
+                name: String,
+                metric_type: String,
+                value: f64,
+                labels: HashMap<String, String>,
+                service: String,
+                bucket_counts: Vec<u64>,
+                bucket_bounds: Vec<f64>,
+                quantile_values: Vec<f64>,
+                quantiles: Vec<f64>,
+            }
+
+            let mut inserter = client.insert::<MetricRow>("metrics").await?;
+
+            for metric in metrics {
+                // Determine which service to use (from labels or default)
+                let service = metric
+                    .labels
+                    .get("service")
+                    .cloned()
+                    .unwrap_or_else(|| "unknown".to_string());
+
+                // Extract simple value or histogram data
+                let (value, bucket_counts, bucket_bounds) = match &metric.value {
+                    crate::models::metric::MetricValue::Simple(v) => {
+                        (*v, Vec::<u64>::new(), Vec::<f64>::new())
+                    }
+                    crate::models::metric::MetricValue::Histogram(hist) => {
+                        let counts: Vec<u64> = hist.buckets.iter().map(|b| b.count).collect();
+                        let bounds: Vec<f64> = hist.buckets.iter().map(|b| b.upper_bound).collect();
+                        (hist.sum, counts, bounds)
+                    }
+                };
+
+                let row = MetricRow {
+                    timestamp: metric.timestamp.timestamp_nanos_opt().unwrap_or(0),
+                    name: metric.name,
+                    metric_type: metric.metric_type.to_string(),
+                    value,
+                    labels: metric.labels,
+                    service,
+                    bucket_counts,
+                    bucket_bounds,
+                    quantile_values: Vec::new(),
+                    quantiles: Vec::new(),
+                };
+
+                inserter.write(&row).await?;
+            }
+
+            inserter.end().await?;
+            Ok(())
+        })
+    }
+
+    fn query(&self, query: MetricQuery) -> Result<MetricQueryResult, MetricStoreError> {
+        // Build SQL query
+        let mut sql = String::from("SELECT timestamp, name, metric_type, value, labels, service, bucket_counts, bucket_bounds FROM metrics WHERE 1=1");
+
+        // Add name filter
+        if let Some(ref name) = query.name {
+            sql.push_str(&format!(" AND name = '{}'", name.replace('\'', "''")));
+        }
+
+        // Add type filter
+        if let Some(ref metric_type) = query.metric_type {
+            sql.push_str(&format!(" AND metric_type = '{}'", metric_type.to_string()));
+        }
+
+        // Add time range filters
+        if let Some(start) = query.start_time {
+            sql.push_str(&format!(" AND timestamp >= {}", start.timestamp_nanos_opt().unwrap_or(0)));
+        }
+        if let Some(end) = query.end_time {
+            sql.push_str(&format!(" AND timestamp < {}", end.timestamp_nanos_opt().unwrap_or(0)));
+        }
+
+        // Add label filters
+        for (key, value) in &query.labels {
+            sql.push_str(&format!(" AND labels['{}'] = '{}'", 
+                key.replace('\'', "''"), 
+                value.replace('\'', "''")));
+        }
+
+        // Add ordering
+        sql.push_str(" ORDER BY timestamp DESC");
+
+        // Calculate total count query
+        let count_sql = sql.replace(
+            "SELECT timestamp, name, metric_type, value, labels, service, bucket_counts, bucket_bounds FROM metrics",
+            "SELECT count() FROM metrics",
+        );
+
+        // Add limit and offset
+        let offset = query.offset.unwrap_or(0);
+        let limit = query.limit.unwrap_or(1000);
+        sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+
+        let client = Arc::clone(&self.client);
+        let count_sql_clone = count_sql.clone();
+
+        self.block_on(async move {
+            // Execute count query
+            let total_count: u64 = client
+                .query(&count_sql_clone)
+                .fetch_one::<u64>()
+                .await?;
+
+            // Execute main query
+            #[derive(clickhouse::Row, serde::Deserialize)]
+            struct MetricRow {
+                timestamp: i64,
+                name: String,
+                metric_type: String,
+                value: f64,
+                labels: HashMap<String, String>,
+                service: String,
+                bucket_counts: Vec<u64>,
+                bucket_bounds: Vec<f64>,
+            }
+
+            let rows: Vec<MetricRow> = client.query(&sql).fetch_all::<MetricRow>().await?;
+
+            // Convert rows to Metric
+            let metrics: Vec<Metric> = rows
+                .into_iter()
+                .map(|row| {
+                    let timestamp = DateTime::from_timestamp_nanos(row.timestamp);
+                    let metric_type = match row.metric_type.as_str() {
+                        "counter" => MetricType::Counter,
+                        "gauge" => MetricType::Gauge,
+                        "histogram" => MetricType::Histogram,
+                        _ => MetricType::Gauge,
+                    };
+
+                    let value = if !row.bucket_counts.is_empty() {
+                        // Reconstruct histogram
+                        let buckets: Vec<crate::models::metric::HistogramBucket> = row
+                            .bucket_bounds
+                            .iter()
+                            .zip(row.bucket_counts.iter())
+                            .map(|(bound, count)| crate::models::metric::HistogramBucket {
+                                upper_bound: *bound,
+                                count: *count,
+                            })
+                            .collect();
+                        let sum = row.value;
+                        let count = row.bucket_counts.iter().sum();
+                        crate::models::metric::MetricValue::Histogram(
+                            crate::models::metric::HistogramData {
+                                buckets,
+                                sum,
+                                count,
+                            },
+                        )
+                    } else {
+                        crate::models::metric::MetricValue::Simple(row.value)
+                    };
+
+                    Metric {
+                        name: row.name,
+                        metric_type,
+                        value,
+                        timestamp,
+                        labels: row.labels,
+                        description: None,
+                        unit: None,
+                    }
+                })
+                .collect();
+
+            Ok(MetricQueryResult {
+                metrics,
+                total_count: total_count as usize,
+            })
+        })
+    }
+
+    fn count(&self) -> Result<usize, MetricStoreError> {
+        let client = Arc::clone(&self.client);
+        let count: u64 = self.block_on(async move {
+            client
+                .query("SELECT count() FROM metrics")
+                .fetch_one::<u64>()
+                .await
+        })?;
+
+        Ok(count as usize)
+    }
+
+    fn clear(&self) -> Result<(), MetricStoreError> {
+        let client = Arc::clone(&self.client);
+        self.block_on(async move {
+            client.query("TRUNCATE TABLE metrics").execute().await
+        })
+    }
+
+    fn aggregate(
+        &self,
+        query: MetricQuery,
+        function: AggregationFunction,
+    ) -> Result<AggregationResult, MetricStoreError> {
+        // Build SQL query with aggregation
+        let agg_func = match function {
+            AggregationFunction::Sum => "sum(value)",
+            AggregationFunction::Avg => "avg(value)",
+            AggregationFunction::Min => "min(value)",
+            AggregationFunction::Max => "max(value)",
+            AggregationFunction::Count => "count()",
+        };
+
+        let mut sql = format!("SELECT {} as agg_value, count() as sample_count FROM metrics WHERE 1=1", agg_func);
+
+        // Add name filter
+        if let Some(ref name) = query.name {
+            sql.push_str(&format!(" AND name = '{}'", name.replace('\'', "''")));
+        }
+
+        // Add type filter
+        if let Some(ref metric_type) = query.metric_type {
+            sql.push_str(&format!(" AND metric_type = '{}'", metric_type.to_string()));
+        }
+
+        // Add time range filters
+        if let Some(start) = query.start_time {
+            sql.push_str(&format!(" AND timestamp >= {}", start.timestamp_nanos_opt().unwrap_or(0)));
+        }
+        if let Some(end) = query.end_time {
+            sql.push_str(&format!(" AND timestamp < {}", end.timestamp_nanos_opt().unwrap_or(0)));
+        }
+
+        // Add label filters
+        for (key, value) in &query.labels {
+            sql.push_str(&format!(
+                " AND labels['{}'] = '{}'",
+                key.replace('\'', "''"),
+                value.replace('\'', "''")
+            ));
+        }
+
+        let client = Arc::clone(&self.client);
+
+        self.block_on(async move {
+            #[derive(clickhouse::Row, serde::Deserialize)]
+            struct AggRow {
+                agg_value: f64,
+                sample_count: u64,
+            }
+
+            let row: AggRow = client.query(&sql).fetch_one::<AggRow>().await?;
+
+            Ok(AggregationResult {
+                value: row.agg_value,
+                count: row.sample_count as usize,
+            })
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

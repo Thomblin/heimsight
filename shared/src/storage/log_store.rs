@@ -289,6 +289,220 @@ impl LogStore for InMemoryLogStore {
     }
 }
 
+/// ClickHouse-backed log store implementation.
+///
+/// This implementation stores logs in ClickHouse for production use.
+/// It provides persistent storage and efficient time-series queries.
+#[derive(Clone)]
+pub struct ClickHouseLogStore {
+    client: Arc<clickhouse::Client>,
+}
+
+impl ClickHouseLogStore {
+    /// Creates a new ClickHouse log store with the given client.
+    #[must_use]
+    pub fn new(client: Arc<clickhouse::Client>) -> Self {
+        Self { client }
+    }
+
+    /// Creates a new ClickHouse log store wrapped in an Arc.
+    #[must_use]
+    pub fn new_shared(client: Arc<clickhouse::Client>) -> Arc<Self> {
+        Arc::new(Self::new(client))
+    }
+
+    /// Helper to execute async operations synchronously.
+    fn block_on<F, T>(&self, future: F) -> Result<T, LogStoreError>
+    where
+        F: std::future::Future<Output = Result<T, clickhouse::error::Error>>,
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(future)
+                .map_err(|e| LogStoreError::StorageError(e.to_string()))
+        })
+    }
+}
+
+impl LogStore for ClickHouseLogStore {
+    fn insert(&self, entry: LogEntry) -> Result<(), LogStoreError> {
+        self.insert_batch(vec![entry])
+    }
+
+    fn insert_batch(&self, entries: Vec<LogEntry>) -> Result<(), LogStoreError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let client = Arc::clone(&self.client);
+        self.block_on(async move {
+            #[derive(clickhouse::Row, serde::Serialize)]
+            struct LogRow {
+                timestamp: i64,
+                trace_id: String,
+                span_id: String,
+                level: String,
+                message: String,
+                service: String,
+                attributes: std::collections::HashMap<String, String>,
+            }
+
+            let mut inserter = client.insert::<LogRow>("logs").await?;
+
+            for entry in entries {
+                // Convert attributes HashMap<String, serde_json::Value> to Map(String, String)
+                let attributes: std::collections::HashMap<String, String> = entry
+                    .attributes
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.to_string()))
+                    .collect();
+
+                let row = LogRow {
+                    timestamp: entry.timestamp.timestamp_nanos_opt().unwrap_or(0),
+                    trace_id: entry.trace_id.unwrap_or_default(),
+                    span_id: entry.span_id.unwrap_or_default(),
+                    level: entry.level.to_string(),
+                    message: entry.message,
+                    service: entry.service,
+                    attributes,
+                };
+
+                inserter.write(&row).await?;
+            }
+
+            inserter.end().await?;
+            Ok(())
+        })
+    }
+
+    fn query(&self, query: LogQuery) -> Result<LogQueryResult, LogStoreError> {
+        // Build SQL query
+        let mut sql = String::from("SELECT timestamp, trace_id, span_id, level, message, service, attributes FROM logs WHERE 1=1");
+
+        // Add time range filters
+        if let Some(start) = query.start_time {
+            sql.push_str(&format!(" AND timestamp >= {}", start.timestamp_nanos_opt().unwrap_or(0)));
+        }
+        if let Some(end) = query.end_time {
+            sql.push_str(&format!(" AND timestamp < {}", end.timestamp_nanos_opt().unwrap_or(0)));
+        }
+
+        // Add level filter
+        if let Some(ref level) = query.level {
+            sql.push_str(&format!(" AND level = '{}'", level.to_string()));
+        }
+
+        // Add service filter
+        if let Some(ref service) = query.service {
+            sql.push_str(&format!(" AND service = '{}'", service.replace('\'', "''")));
+        }
+
+        // Add message search filter
+        if let Some(ref pattern) = query.message_contains {
+            sql.push_str(&format!(" AND position(lower(message), '{}') > 0", pattern.to_lowercase().replace('\'', "''")));
+        }
+
+        // Add ordering
+        sql.push_str(" ORDER BY timestamp DESC");
+
+        // Calculate total count query
+        let count_sql = sql.replace("SELECT timestamp, trace_id, span_id, level, message, service, attributes FROM logs", "SELECT count() FROM logs");
+
+        // Add limit and offset
+        let offset = query.offset.unwrap_or(0);
+        let limit = query.limit.unwrap_or(1000);
+        sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+
+        let client = Arc::clone(&self.client);
+        let count_sql_clone = count_sql.clone();
+        
+        // Execute queries
+        self.block_on(async move {
+            // Execute count query
+            let total_count: u64 = client
+                .query(&count_sql_clone)
+                .fetch_one::<u64>()
+                .await?;
+
+            // Execute main query
+            #[derive(clickhouse::Row, serde::Deserialize)]
+            struct LogRow {
+                timestamp: i64,
+                trace_id: String,
+                span_id: String,
+                level: String,
+                message: String,
+                service: String,
+                attributes: std::collections::HashMap<String, String>,
+            }
+
+            let rows: Vec<LogRow> = client
+                .query(&sql)
+                .fetch_all::<LogRow>()
+                .await?;
+
+            // Convert rows to LogEntry
+            let logs: Vec<LogEntry> = rows
+                .into_iter()
+                .map(|row| {
+                    let timestamp = DateTime::from_timestamp_nanos(row.timestamp);
+                    let level = match row.level.as_str() {
+                        "trace" => LogLevel::Trace,
+                        "debug" => LogLevel::Debug,
+                        "info" => LogLevel::Info,
+                        "warn" => LogLevel::Warn,
+                        "error" => LogLevel::Error,
+                        "fatal" => LogLevel::Fatal,
+                        _ => LogLevel::Info,
+                    };
+                    let attributes: std::collections::HashMap<String, serde_json::Value> = row
+                        .attributes
+                        .into_iter()
+                        .map(|(k, v)| (k, serde_json::Value::String(v)))
+                        .collect();
+
+                    LogEntry {
+                        timestamp,
+                        level,
+                        message: row.message,
+                        service: row.service,
+                        attributes,
+                        trace_id: if row.trace_id.is_empty() { None } else { Some(row.trace_id) },
+                        span_id: if row.span_id.is_empty() { None } else { Some(row.span_id) },
+                    }
+                })
+                .collect();
+
+            Ok(LogQueryResult {
+                logs,
+                total_count: total_count as usize,
+            })
+        })
+    }
+
+    fn count(&self) -> Result<usize, LogStoreError> {
+        let client = Arc::clone(&self.client);
+        let count: u64 = self.block_on(async move {
+            client
+                .query("SELECT count() FROM logs")
+                .fetch_one::<u64>()
+                .await
+        })?;
+
+        Ok(count as usize)
+    }
+
+    fn clear(&self) -> Result<(), LogStoreError> {
+        let client = Arc::clone(&self.client);
+        self.block_on(async move {
+            client
+                .query("TRUNCATE TABLE logs")
+                .execute()
+                .await
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -21,10 +21,12 @@ test-verbose:
 
 # Run API server
 run-api:
+	docker compose up -d
 	cargo run -p api
 
 # Run API server with debug logging
 run-api-debug:
+	docker compose up -d
 	RUST_LOG=debug cargo run -p api
 
 # Run CLI
@@ -72,6 +74,10 @@ watch-api:
 docs:
 	cargo doc --no-deps --open
 
+# connect to heimsight db
+heimsight-client:
+	docker exec -it heimsight-clickhouse clickhouse-client
+
 # Help
 help:
 	@echo "Heimsight Development Commands"
@@ -79,20 +85,21 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build          Build all crates (debug)"
-	@echo "  build-release  Build all crates (release)"
-	@echo "  test           Run all tests"
-	@echo "  test-verbose   Run tests with output"
-	@echo "  run-api        Run API server"
-	@echo "  run-api-debug  Run API server with debug logging"
-	@echo "  run-cli        Run CLI (use ARGS='...' for arguments)"
-	@echo "  cli-health     Run CLI health check command"
-	@echo "  fmt            Format code"
-	@echo "  fmt-check      Check code formatting"
-	@echo "  lint           Run clippy linter"
-	@echo "  check          Run fmt-check, lint, and test"
-	@echo "  clean          Clean build artifacts"
-	@echo "  watch-test     Watch and run tests on changes"
-	@echo "  watch-api      Watch and run API on changes"
-	@echo "  docs           Build and open documentation"
-	@echo "  help           Show this help message"
+	@echo "  build             Build all crates (debug)"
+	@echo "  build-release     Build all crates (release)"
+	@echo "  test              Run all tests"
+	@echo "  test-verbose      Run tests with output"
+	@echo "  run-api           Run API server"
+	@echo "  run-api-debug     Run API server with debug logging"
+	@echo "  run-cli           Run CLI (use ARGS='...' for arguments)"
+	@echo "  cli-health        Run CLI health check command"
+	@echo "  fmt               Format code"
+	@echo "  fmt-check         Check code formatting"
+	@echo "  lint              Run clippy linter"
+	@echo "  check             Run fmt-check, lint, and test"
+	@echo "  clean             Clean build artifacts"
+	@echo "  watch-test        Watch and run tests on changes"
+	@echo "  watch-api         Watch and run API on changes"
+	@echo "  docs              Build and open documentation"
+	@echo "  heimsight-client  Connect to heimsight database"
+	@echo "  help              Show this help message"

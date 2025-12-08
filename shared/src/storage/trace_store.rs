@@ -324,6 +324,457 @@ impl TraceStore for InMemoryTraceStore {
     }
 }
 
+/// ClickHouse-backed trace store implementation.
+///
+/// This implementation stores spans in ClickHouse for production use.
+/// It provides persistent storage and efficient distributed trace queries.
+#[derive(Clone)]
+pub struct ClickHouseTraceStore {
+    client: Arc<clickhouse::Client>,
+}
+
+impl ClickHouseTraceStore {
+    /// Creates a new ClickHouse trace store with the given client.
+    #[must_use]
+    pub fn new(client: Arc<clickhouse::Client>) -> Self {
+        Self { client }
+    }
+
+    /// Creates a new ClickHouse trace store wrapped in an Arc.
+    #[must_use]
+    pub fn new_shared(client: Arc<clickhouse::Client>) -> Arc<Self> {
+        Arc::new(Self::new(client))
+    }
+
+    /// Helper to execute async operations synchronously.
+    fn block_on<F, T>(&self, future: F) -> Result<T, TraceStoreError>
+    where
+        F: std::future::Future<Output = Result<T, clickhouse::error::Error>>,
+    {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current()
+                .block_on(future)
+                .map_err(|e| TraceStoreError::StorageError(e.to_string()))
+        })
+    }
+}
+
+impl TraceStore for ClickHouseTraceStore {
+    fn insert_span(&self, span: Span) -> Result<(), TraceStoreError> {
+        self.insert_spans(vec![span])
+    }
+
+    fn insert_spans(&self, spans: Vec<Span>) -> Result<(), TraceStoreError> {
+        if spans.is_empty() {
+            return Ok(());
+        }
+
+        let client = Arc::clone(&self.client);
+        self.block_on(async move {
+            #[derive(clickhouse::Row, serde::Serialize)]
+            struct SpanRow {
+                trace_id: String,
+                span_id: String,
+                parent_span_id: String,
+                start_time: i64,
+                end_time: i64,
+                duration_ns: u64,
+                name: String,
+                span_kind: String,
+                service: String,
+                operation: String,
+                status_code: String,
+                status_message: String,
+                attributes: HashMap<String, String>,
+                resource_attributes: HashMap<String, String>,
+                events: Vec<(i64, String, HashMap<String, String>)>,
+                links: Vec<(String, String, HashMap<String, String>)>,
+            }
+
+            let mut inserter = client.insert::<SpanRow>("spans").await?;
+
+            for span in spans {
+                // Calculate duration in nanoseconds
+                let duration_ns = (span.end_time - span.start_time).num_nanoseconds().unwrap_or(0);
+
+                // Convert attributes to Map
+                let attributes: HashMap<String, String> = span
+                    .attributes
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.to_string()))
+                    .collect();
+
+                // Convert events to array of tuples
+                let events: Vec<(i64, String, HashMap<String, String>)> = span
+                    .events
+                    .iter()
+                    .map(|e| {
+                        let attrs: HashMap<String, String> = e
+                            .attributes
+                            .iter()
+                            .map(|(k, v)| (k.clone(), v.to_string()))
+                            .collect();
+                        (
+                            e.timestamp.timestamp_nanos_opt().unwrap_or(0),
+                            e.name.clone(),
+                            attrs,
+                        )
+                    })
+                    .collect();
+
+                let row = SpanRow {
+                    trace_id: span.trace_id,
+                    span_id: span.span_id,
+                    parent_span_id: span.parent_span_id.unwrap_or_default(),
+                    start_time: span.start_time.timestamp_nanos_opt().unwrap_or(0),
+                    end_time: span.end_time.timestamp_nanos_opt().unwrap_or(0),
+                    duration_ns: duration_ns as u64,
+                    name: span.name,
+                    span_kind: span.kind.to_string(),
+                    service: span.service.clone(),
+                    operation: span.service,
+                    status_code: span.status.to_string(),
+                    status_message: String::new(),
+                    attributes,
+                    resource_attributes: HashMap::new(),
+                    events,
+                    links: Vec::new(),
+                };
+
+                inserter.write(&row).await?;
+            }
+
+            inserter.end().await?;
+            Ok(())
+        })
+    }
+
+    fn get_trace(&self, trace_id: &str) -> Result<Trace, TraceStoreError> {
+        let trace_id = trace_id.to_string();
+        let trace_id_for_error = trace_id.clone();
+        let client = Arc::clone(&self.client);
+
+        self.block_on(async move {
+            let sql = format!(
+                "SELECT trace_id, span_id, parent_span_id, \
+                 start_time, end_time, duration_ns, name, span_kind, service, operation, \
+                 status_code, status_message, attributes, resource_attributes, \
+                 events, links \
+                 FROM spans WHERE trace_id = '{}' ORDER BY start_time",
+                trace_id.replace('\'', "''")
+            );
+
+            #[derive(clickhouse::Row, serde::Deserialize)]
+            #[allow(dead_code)]
+            struct SpanRow {
+                trace_id: String,
+                span_id: String,
+                parent_span_id: String,
+                start_time: i64,
+                end_time: i64,
+                duration_ns: u64,
+                name: String,
+                span_kind: String,
+                service: String,
+                operation: String,
+                status_code: String,
+                status_message: String,
+                attributes: HashMap<String, String>,
+                resource_attributes: HashMap<String, String>,
+                events: Vec<(i64, String, HashMap<String, String>)>,
+                links: Vec<(String, String, HashMap<String, String>)>,
+            }
+
+            let rows: Vec<SpanRow> = client.query(&sql).fetch_all::<SpanRow>().await?;
+
+            if rows.is_empty() {
+                return Err(clickhouse::error::Error::Custom(format!(
+                    "Trace not found: {}",
+                    trace_id
+                )));
+            }
+
+            // Convert rows to Spans
+            let spans: Vec<Span> = rows
+                .into_iter()
+                .map(|row| {
+                    let start_time = DateTime::from_timestamp_nanos(row.start_time);
+                    let end_time = DateTime::from_timestamp_nanos(row.end_time);
+
+                    let status = match row.status_code.as_str() {
+                        "ok" => crate::models::trace::SpanStatus::Ok,
+                        "error" => crate::models::trace::SpanStatus::Error,
+                        "cancelled" => crate::models::trace::SpanStatus::Cancelled,
+                        _ => crate::models::trace::SpanStatus::Ok,
+                    };
+
+                    let kind = match row.span_kind.as_str() {
+                        "internal" => crate::models::trace::SpanKind::Internal,
+                        "server" => crate::models::trace::SpanKind::Server,
+                        "client" => crate::models::trace::SpanKind::Client,
+                        "producer" => crate::models::trace::SpanKind::Producer,
+                        "consumer" => crate::models::trace::SpanKind::Consumer,
+                        _ => crate::models::trace::SpanKind::Internal,
+                    };
+
+                    let attributes: HashMap<String, serde_json::Value> = row
+                        .attributes
+                        .into_iter()
+                        .map(|(k, v)| (k, serde_json::Value::String(v)))
+                        .collect();
+
+                    let events: Vec<crate::models::trace::SpanEvent> = row
+                        .events
+                        .into_iter()
+                        .map(|(ts, name, attrs)| {
+                            let timestamp = DateTime::from_timestamp_nanos(ts);
+                            let event_attrs: HashMap<String, serde_json::Value> = attrs
+                                .into_iter()
+                                .map(|(k, v)| (k, serde_json::Value::String(v)))
+                                .collect();
+                            crate::models::trace::SpanEvent {
+                                name,
+                                timestamp,
+                                attributes: event_attrs,
+                            }
+                        })
+                        .collect();
+
+                    Span {
+                        trace_id: row.trace_id,
+                        span_id: row.span_id,
+                        parent_span_id: if row.parent_span_id.is_empty() {
+                            None
+                        } else {
+                            Some(row.parent_span_id)
+                        },
+                        name: row.name,
+                        service: row.service,
+                        kind,
+                        status,
+                        start_time,
+                        end_time,
+                        attributes,
+                        events,
+                    }
+                })
+                .collect();
+
+            Trace::from_spans(spans).ok_or_else(|| {
+                clickhouse::error::Error::Custom("Failed to construct trace".to_string())
+            })
+        })
+        .map_err(|e| match e {
+            TraceStoreError::StorageError(msg) if msg.contains("Trace not found") => {
+                TraceStoreError::NotFound(trace_id_for_error.clone())
+            }
+            _ => e,
+        })
+    }
+
+    fn query(&self, query: TraceQuery) -> Result<TraceQueryResult, TraceStoreError> {
+        let client = Arc::clone(&self.client);
+
+        self.block_on(async move {
+            // Build SQL to get unique trace IDs matching filters
+            let mut sql = String::from("SELECT DISTINCT trace_id FROM spans WHERE 1=1");
+
+            // Add service filter
+            if let Some(ref service) = query.service {
+                sql.push_str(&format!(" AND service = '{}'", service.replace('\'', "''")));
+            }
+
+            // Add time range filters
+            if let Some(start) = query.start_time {
+                sql.push_str(&format!(
+                    " AND start_time >= {}",
+                    start.timestamp_nanos_opt().unwrap_or(0)
+                ));
+            }
+            if let Some(end) = query.end_time {
+                sql.push_str(&format!(
+                    " AND start_time < {}",
+                    end.timestamp_nanos_opt().unwrap_or(0)
+                ));
+            }
+
+            // Add duration filters
+            if let Some(min_duration) = query.min_duration_ms {
+                sql.push_str(&format!(" AND duration_ns >= {}", min_duration * 1_000_000));
+            }
+            if let Some(max_duration) = query.max_duration_ms {
+                sql.push_str(&format!(" AND duration_ns <= {}", max_duration * 1_000_000));
+            }
+
+            // Add status filter
+            if let Some(ref status) = query.status {
+                sql.push_str(&format!(" AND status_code = '{}'", status.to_string()));
+            }
+
+            sql.push_str(" ORDER BY trace_id DESC");
+
+            // Calculate total count
+            let count_sql = sql.replace("SELECT DISTINCT trace_id FROM spans", "SELECT count(DISTINCT trace_id) FROM spans");
+
+            // Add limit and offset
+            let offset = query.offset.unwrap_or(0);
+            let limit = query.limit.unwrap_or(100);
+            sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+
+            // Execute count query
+            let total_count: u64 = client
+                .query(&count_sql)
+                .fetch_one::<u64>()
+                .await?;
+
+            // Execute main query to get trace IDs
+            let trace_ids: Vec<String> = client.query(&sql).fetch_all::<String>().await?;
+
+            // Fetch full traces for each ID
+            let mut traces = Vec::new();
+            for trace_id in trace_ids {
+                // Use internal get_trace implementation
+                let span_sql = format!(
+                    "SELECT trace_id, span_id, parent_span_id, \
+                     start_time, end_time, duration_ns, name, span_kind, service, operation, \
+                     status_code, status_message, attributes, resource_attributes, \
+                     events, links \
+                     FROM spans WHERE trace_id = '{}' ORDER BY start_time",
+                    trace_id.replace('\'', "''")
+                );
+
+                #[derive(clickhouse::Row, serde::Deserialize)]
+                #[allow(dead_code)]
+                struct SpanRow {
+                    trace_id: String,
+                    span_id: String,
+                    parent_span_id: String,
+                    start_time: i64,
+                    end_time: i64,
+                    duration_ns: u64,
+                    name: String,
+                    span_kind: String,
+                    service: String,
+                    operation: String,
+                    status_code: String,
+                    status_message: String,
+                    attributes: HashMap<String, String>,
+                    resource_attributes: HashMap<String, String>,
+                    events: Vec<(i64, String, HashMap<String, String>)>,
+                    links: Vec<(String, String, HashMap<String, String>)>,
+                }
+
+                let rows: Vec<SpanRow> = client.query(&span_sql).fetch_all::<SpanRow>().await?;
+
+                let spans: Vec<Span> = rows
+                    .into_iter()
+                    .map(|row| {
+                        let start_time = DateTime::from_timestamp_nanos(row.start_time);
+                        let end_time = DateTime::from_timestamp_nanos(row.end_time);
+
+                        let status = match row.status_code.as_str() {
+                            "ok" => crate::models::trace::SpanStatus::Ok,
+                            "error" => crate::models::trace::SpanStatus::Error,
+                            "cancelled" => crate::models::trace::SpanStatus::Cancelled,
+                            _ => crate::models::trace::SpanStatus::Ok,
+                        };
+
+                        let kind = match row.span_kind.as_str() {
+                            "internal" => crate::models::trace::SpanKind::Internal,
+                            "server" => crate::models::trace::SpanKind::Server,
+                            "client" => crate::models::trace::SpanKind::Client,
+                            "producer" => crate::models::trace::SpanKind::Producer,
+                            "consumer" => crate::models::trace::SpanKind::Consumer,
+                            _ => crate::models::trace::SpanKind::Internal,
+                        };
+
+                        let attributes: HashMap<String, serde_json::Value> = row
+                            .attributes
+                            .into_iter()
+                            .map(|(k, v)| (k, serde_json::Value::String(v)))
+                            .collect();
+
+                        let events: Vec<crate::models::trace::SpanEvent> = row
+                            .events
+                            .into_iter()
+                            .map(|(ts, name, attrs)| {
+                                let timestamp = DateTime::from_timestamp_nanos(ts);
+                                let event_attrs: HashMap<String, serde_json::Value> = attrs
+                                    .into_iter()
+                                    .map(|(k, v)| (k, serde_json::Value::String(v)))
+                                    .collect();
+                                crate::models::trace::SpanEvent {
+                                    name,
+                                    timestamp,
+                                    attributes: event_attrs,
+                                }
+                            })
+                            .collect();
+
+                        Span {
+                            trace_id: row.trace_id,
+                            span_id: row.span_id,
+                            parent_span_id: if row.parent_span_id.is_empty() {
+                                None
+                            } else {
+                                Some(row.parent_span_id)
+                            },
+                            name: row.name,
+                            service: row.service,
+                            kind,
+                            status,
+                            start_time,
+                            end_time,
+                            attributes,
+                            events,
+                        }
+                    })
+                    .collect();
+
+                if let Some(trace) = Trace::from_spans(spans) {
+                    traces.push(trace);
+                }
+            }
+
+            Ok(TraceQueryResult {
+                traces,
+                total_count: total_count as usize,
+            })
+        })
+    }
+
+    fn span_count(&self) -> Result<usize, TraceStoreError> {
+        let client = Arc::clone(&self.client);
+        let count: u64 = self.block_on(async move {
+            client
+                .query("SELECT count() FROM spans")
+                .fetch_one::<u64>()
+                .await
+        })?;
+
+        Ok(count as usize)
+    }
+
+    fn trace_count(&self) -> Result<usize, TraceStoreError> {
+        let client = Arc::clone(&self.client);
+        let count: u64 = self.block_on(async move {
+            client
+                .query("SELECT count(DISTINCT trace_id) FROM spans")
+                .fetch_one::<u64>()
+                .await
+        })?;
+
+        Ok(count as usize)
+    }
+
+    fn clear(&self) -> Result<(), TraceStoreError> {
+        let client = Arc::clone(&self.client);
+        self.block_on(async move {
+            client.query("TRUNCATE TABLE spans").execute().await
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
