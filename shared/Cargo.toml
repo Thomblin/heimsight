@@ -27,4 +27,4 @@ tokio-test = { workspace = true }
 
 [build-dependencies]
 tonic-build = "0.12"
-pbjson-build = "0.7"
+pbjson-build = "0.8"
