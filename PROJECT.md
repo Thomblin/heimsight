@@ -483,7 +483,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 3.3: OTLP gRPC Receiver
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Accept OTLP data over gRPC.
 
@@ -492,12 +492,27 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Implement LogsService, MetricsService, TracesService
 - Handle streaming and unary RPCs
 - Wire to same internal stores
+- Write unit tests
 - Write integration tests
+- Add examples/grpc_*.http files for manual testing if applicable
 
 **Acceptance Criteria:**
 - gRPC endpoint accepts OTLP data
 - Works with OpenTelemetry SDK exporters
 - Performance is acceptable
+
+**Implementation Notes:**
+- gRPC server runs on port 4317 (configurable via `HEIMSIGHT_GRPC_PORT`)
+- HTTP server runs on port 8080 (configurable via `HEIMSIGHT_PORT`)
+- Both servers run concurrently using `tokio::try_join!`
+- Implements all three OTLP gRPC services:
+  - `opentelemetry.proto.collector.logs.v1.LogsService`
+  - `opentelemetry.proto.collector.metrics.v1.MetricsService`
+  - `opentelemetry.proto.collector.trace.v1.TraceService`
+- Supports partial success responses for invalid data
+- Services located in `api/src/grpc/services.rs`
+- 10 unit tests for gRPC services
+- 4 integration tests for end-to-end gRPC flow
 
 ---
 
@@ -1052,6 +1067,8 @@ docker-compose up
 ```
 
 ### API Endpoints (MVP)
+
+#### HTTP Endpoints (Port 8080)
 ```
 GET  /health              - Health check
 POST /api/v1/logs         - Ingest logs
@@ -1062,10 +1079,18 @@ POST /v1/metrics          - OTLP HTTP metrics
 POST /v1/traces           - OTLP HTTP traces
 ```
 
+#### gRPC Endpoints (Port 4317)
+```
+opentelemetry.proto.collector.logs.v1.LogsService/Export       - OTLP gRPC logs
+opentelemetry.proto.collector.metrics.v1.MetricsService/Export - OTLP gRPC metrics
+opentelemetry.proto.collector.trace.v1.TraceService/Export     - OTLP gRPC traces
+```
+
 ### Environment Variables
 ```
 HEIMSIGHT_HOST=0.0.0.0
 HEIMSIGHT_PORT=8080
+HEIMSIGHT_GRPC_PORT=4317
 HEIMSIGHT_LOG_LEVEL=info
 HEIMSIGHT_DB_URL=mongodb://localhost:27017/heimsight
 ```

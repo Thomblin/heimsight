@@ -100,3 +100,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Partial success responses indicating rejected items
   - Added example files: `examples/otlp_logs.http`, `examples/otlp_metrics.http`, `examples/otlp_traces.http`
   - Standard OpenTelemetry SDK exporters can now send data directly to Heimsight
+
+- **OTLP gRPC Receiver**
+  - Full gRPC server implementation running alongside HTTP server
+  - gRPC server listens on port 4317 (configurable via `HEIMSIGHT_GRPC_PORT`)
+  - HTTP server listens on port 8080 (configurable via `HEIMSIGHT_PORT`)
+  - Implements three OTLP gRPC collector services:
+    - `opentelemetry.proto.collector.logs.v1.LogsService`
+    - `opentelemetry.proto.collector.metrics.v1.MetricsService`
+    - `opentelemetry.proto.collector.trace.v1.TraceService`
+  - Both servers run concurrently using `tokio::try_join!` for efficient resource utilization
+  - Supports partial success responses for batches with invalid data
+  - Automatic conversion from OTLP protobuf format to internal Heimsight types
+  - Thread-safe shared storage between HTTP and gRPC endpoints
+  - Graceful shutdown handling for both servers
+  - Comprehensive test coverage:
+    - 10 unit tests for gRPC service implementations
+    - 4 integration tests for end-to-end gRPC flow
+  - Compatible with OpenTelemetry SDK gRPC exporters

@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Compile OTLP protobuf definitions with file descriptor output
     tonic_build::configure()
-        .build_server(false) // We only need client types for now
+        .build_server(true) // Enable gRPC server generation
         .emit_rerun_if_changed(false) // Don't rebuild unless proto files change
         .file_descriptor_set_path(&descriptor_path)
         .compile_protos(proto_files, proto_include_dirs)?;

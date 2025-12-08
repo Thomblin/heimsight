@@ -27,6 +27,7 @@
 #![warn(clippy::pedantic)]
 
 mod config;
+pub mod grpc;
 mod routes;
 mod state;
 
@@ -35,7 +36,9 @@ pub use state::AppState;
 
 use anyhow::Result;
 use axum::Router;
+use shared::otlp::proto;
 use tokio::net::TcpListener;
+use tonic::transport::Server;
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::trace::TraceLayer;
 
@@ -81,22 +84,58 @@ pub async fn run_server_with_config(config: Config) -> Result<()> {
 /// - The server fails to bind to the configured address
 /// - A fatal error occurs during operation
 pub async fn run_server_with_config_and_state(config: Config, state: AppState) -> Result<()> {
-    let addr = config.socket_addr();
+    let http_addr = config.socket_addr();
+    let grpc_addr = config.grpc_socket_addr();
 
     tracing::info!(
         host = %config.host,
-        port = %config.port,
+        http_port = %config.port,
+        grpc_port = %config.grpc_port,
         "Heimsight API server starting"
     );
 
-    let app = create_router(state);
-    let listener = TcpListener::bind(addr).await?;
+    // Create HTTP server
+    let app = create_router(state.clone());
+    let listener = TcpListener::bind(http_addr).await?;
 
-    tracing::info!(%addr, "Listening for connections");
+    tracing::info!(%http_addr, "HTTP server listening");
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await?;
+    // Create gRPC services
+    let logs_service = proto::collector::logs::v1::logs_service_server::LogsServiceServer::new(
+        grpc::LogsServiceImpl::new(state.clone()),
+    );
+    let metrics_service =
+        proto::collector::metrics::v1::metrics_service_server::MetricsServiceServer::new(
+            grpc::MetricsServiceImpl::new(state.clone()),
+        );
+    let traces_service = proto::collector::trace::v1::trace_service_server::TraceServiceServer::new(
+        grpc::TracesServiceImpl::new(state),
+    );
+
+    // Build gRPC server
+    let grpc_server = Server::builder()
+        .add_service(logs_service)
+        .add_service(metrics_service)
+        .add_service(traces_service)
+        .serve_with_shutdown(grpc_addr, shutdown_signal());
+
+    tracing::info!(%grpc_addr, "gRPC server listening");
+
+    // Run both servers concurrently
+    let http_server = axum::serve(listener, app).with_graceful_shutdown(shutdown_signal());
+
+    tokio::try_join!(
+        async move {
+            http_server
+                .await
+                .map_err(|e| anyhow::anyhow!("HTTP server error: {e}"))
+        },
+        async move {
+            grpc_server
+                .await
+                .map_err(|e| anyhow::anyhow!("gRPC server error: {e}"))
+        }
+    )?;
 
     tracing::info!("Server shutdown complete");
     Ok(())
@@ -204,6 +243,7 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 8080);
+        assert_eq!(config.grpc_port, 4317);
     }
 
     #[test]
@@ -211,8 +251,20 @@ mod tests {
         let config = Config {
             host: "127.0.0.1".to_string(),
             port: 3000,
+            grpc_port: 4317,
         };
         let addr = config.socket_addr();
         assert_eq!(addr.to_string(), "127.0.0.1:3000");
+    }
+
+    #[test]
+    fn test_config_grpc_socket_addr() {
+        let config = Config {
+            host: "127.0.0.1".to_string(),
+            port: 3000,
+            grpc_port: 9090,
+        };
+        let addr = config.grpc_socket_addr();
+        assert_eq!(addr.to_string(), "127.0.0.1:9090");
     }
 }
