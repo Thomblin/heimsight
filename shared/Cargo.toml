@@ -26,5 +26,5 @@ pbjson-types = { workspace = true }
 tokio-test = { workspace = true }
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.14"
 pbjson-build = "0.8"
