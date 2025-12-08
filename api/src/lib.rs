@@ -27,6 +27,7 @@
 #![warn(clippy::pedantic)]
 
 mod config;
+pub mod db;
 pub mod grpc;
 mod routes;
 mod state;

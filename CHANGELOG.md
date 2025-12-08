@@ -118,3 +118,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - 10 unit tests for gRPC service implementations
     - 4 integration tests for end-to-end gRPC flow
   - Compatible with OpenTelemetry SDK gRPC exporters
+
+- **Database Selection & Setup (ClickHouse)**
+  - Evaluated four database options: ClickHouse, TimescaleDB, MongoDB, ScyllaDB
+  - Selected ClickHouse for production-grade observability workloads
+    - Purpose-built for analytical queries on time-series data
+    - Superior compression (10-100x typical)
+    - Native SQL support with analytics extensions
+    - Built-in materialized views for continuous aggregation
+    - Proven at scale by major observability platforms (SigNoz, Grafana Tempo)
+  - Docker Compose setup for local development
+    - ClickHouse server 24.11 with health checks
+    - Automatic schema initialization on first startup
+    - Persistent volume for data storage
+  - Database schema with three main tables:
+    - `logs`: Time-series log storage with TTL (30 days), full-text indexes, Map for attributes
+    - `metrics`: Time-series metrics (counter, gauge, histogram) with TTL (90 days), support for all metric types
+    - `spans`: Distributed trace spans with TTL (30 days), support for events and links
+  - Materialized views for automatic aggregation:
+    - `logs_hourly_stats`: Hourly log counts by service and level (90 day retention)
+    - `metrics_5min_agg`: 5-minute metric aggregations (180 day retention)
+    - `metrics_hourly_agg`: Hourly metric aggregations (365 day retention)
+    - `trace_stats`: Per-trace summary statistics (30 day retention)
+    - `span_performance_hourly`: Hourly service performance metrics (90 day retention)
+  - Database connection module (`api/src/db.rs`):
+    - `DatabaseConfig` for loading configuration from environment variables
+    - `Database` wrapper with connection pooling using Arc<Client>
+    - `ping()` method for health checking database connectivity
+    - Comprehensive test coverage (4 tests)
+  - Added `clickhouse` crate (v0.12) as dependency
+  - Environment variables for database configuration:
+    - `HEIMSIGHT_DB_URL`: ClickHouse URL (default: `http://localhost:8123`)
+    - `HEIMSIGHT_DB_NAME`: Database name (default: `heimsight`)
+    - `HEIMSIGHT_DB_USER`: Database user (default: `heimsight`)
+    - `HEIMSIGHT_DB_PASSWORD`: Database password (default: `heimsight_dev`)
+  - Documentation:
+    - `DATABASE_EVALUATION.md`: Comprehensive comparison of all evaluated databases
+    - `schema/README.md`: Schema documentation with design decisions and query examples
+    - Updated README.md with database setup instructions
+  - All 262 tests passing (including new database connectivity test)

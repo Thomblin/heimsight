@@ -55,10 +55,37 @@ cargo clippy -- -D warnings
 cargo fmt
 ```
 
+### Setting Up the Database
+
+Heimsight uses ClickHouse for persistent storage of logs, metrics, and traces.
+
+```bash
+# Start ClickHouse in Docker
+docker compose up -d clickhouse
+
+# Verify it's running
+docker ps | grep clickhouse
+
+# Check logs
+docker logs heimsight-clickhouse
+
+# Stop the database
+docker compose down
+```
+
+The database schema is automatically initialized on first startup. Tables include:
+- `logs` - Log entries with full-text search
+- `metrics` - Metrics with multiple types (counter, gauge, histogram)
+- `spans` - Distributed trace spans
+- Materialized views for automatic aggregation
+
 ### Running the API Server
 
 ```bash
-# Development mode
+# Start the database first
+docker compose up -d clickhouse
+
+# Run API server in development mode
 cargo run -p api
 
 # With custom log level
@@ -81,10 +108,18 @@ Environment variables:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `HEIMSIGHT_HOST` | API server bind address | `0.0.0.0` |
-| `HEIMSIGHT_PORT` | API server port | `8080` |
+| **API Server** | | |
+| `HEIMSIGHT_HOST` | HTTP server bind address | `0.0.0.0` |
+| `HEIMSIGHT_PORT` | HTTP server port | `8080` |
+| `HEIMSIGHT_GRPC_PORT` | gRPC server port | `4317` |
 | `RUST_LOG` | Log level filter | `info` |
-| `HEIMSIGHT_API_URL` | CLI: API server URL | `http://localhost:8080` |
+| **Database** | | |
+| `HEIMSIGHT_DB_URL` | ClickHouse URL | `http://localhost:8123` |
+| `HEIMSIGHT_DB_NAME` | Database name | `heimsight` |
+| `HEIMSIGHT_DB_USER` | Database user | `heimsight` |
+| `HEIMSIGHT_DB_PASSWORD` | Database password | `heimsight_dev` |
+| **CLI** | | |
+| `HEIMSIGHT_API_URL` | API server URL | `http://localhost:8080` |
 
 ## API Endpoints
 

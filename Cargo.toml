@@ -58,5 +58,8 @@ base64 = "0.22"
 pbjson = "0.7"
 pbjson-types = "0.7"
 
+# Database
+clickhouse = "0.12"
+
 # Internal crates
 shared = { path = "shared" }

@@ -517,7 +517,7 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 3.4: Database Selection & Setup
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Choose and set up persistent database.
 
@@ -530,9 +530,21 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add connection pooling
 
 **Acceptance Criteria:**
-- Database runs in Docker
-- Connection from Rust works
-- Schema supports logs, metrics, traces
+- Database runs in Docker ✅
+- Connection from Rust works ✅
+- Schema supports logs, metrics, traces ✅
+
+**Implementation Notes:**
+- Selected **ClickHouse** for production-grade observability performance
+- Docker Compose configured with ClickHouse 24.11
+- Schema includes:
+  - `logs` table with TTL (30 days), full-text indexes, Map for attributes
+  - `metrics` table with TTL (90 days), support for counter/gauge/histogram
+  - `spans` table with TTL (30 days), support for events and links
+  - 5 materialized views for automatic aggregation
+- Database connection module in `api/src/db.rs` with configuration and health checking
+- Comprehensive documentation in `DATABASE_EVALUATION.md` and `schema/README.md`
+- All tests passing (262 total, including database connectivity test)
 
 ---
 

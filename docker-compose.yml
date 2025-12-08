@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.11
+    container_name: heimsight-clickhouse
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native protocol
+    environment:
+      CLICKHOUSE_DB: heimsight
+      CLICKHOUSE_USER: heimsight
+      CLICKHOUSE_PASSWORD: heimsight_dev
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./schema:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - heimsight
+
+  # Placeholder for future Heimsight API service
+  # api:
+  #   build: .
+  #   ports:
+  #     - "8080:8080"
+  #     - "4317:4317"
+  #   depends_on:
+  #     clickhouse:
+  #       condition: service_healthy
+  #   environment:
+  #     HEIMSIGHT_DB_URL: http://clickhouse:8123
+  #     HEIMSIGHT_DB_NAME: heimsight
+  #     HEIMSIGHT_DB_USER: heimsight
+  #     HEIMSIGHT_DB_PASSWORD: heimsight_dev
+  #   networks:
+  #     - heimsight
+
+volumes:
+  clickhouse_data:
+    driver: local
+
+networks:
+  heimsight:
+    driver: bridge
