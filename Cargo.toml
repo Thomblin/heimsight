@@ -14,9 +14,9 @@ repository = "https://github.com/Thomblin/heimsight"
 tokio = { version = "1", features = ["full"] }
 
 # Web framework
-axum = "0.8"
-tower = "0.5"
-tower-http = { version = "0.6", features = ["trace", "cors", "limit"] }
+axum = "0.8.7"
+tower = "0.5.2"
+tower-http = { version = "0.6.6", features = ["trace", "cors", "limit"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -28,10 +28,10 @@ thiserror = "2"
 
 # Logging and tracing
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 
 # Configuration
-dotenvy = "0.15"
+dotenvy = "0.15.7"
 
 # Validation
 validator = { version = "0.20", features = ["derive"] }
@@ -43,23 +43,23 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive", "env"] }
 
 # Testing
-tokio-test = "0.4"
-http-body-util = "0.1"
+tokio-test = "0.4.4"
+http-body-util = "0.1.3"
 
 # OTLP and protobuf
-prost = "0.13"
+prost = "0.14"
 prost-types = "0.14"
-tonic = "0.12"
+tonic = "0.14"
 
 # Encoding
-base64 = "0.22"
+base64 = "0.22.1"
 
 # Protobuf JSON support
-pbjson = "0.7"
-pbjson-types = "0.7"
+pbjson = "0.8"
+pbjson-types = "0.8"
 
 # Database
-clickhouse = "0.12"
+clickhouse = "0.14"
 
 # Internal crates
 shared = { path = "shared" }

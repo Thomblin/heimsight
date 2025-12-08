@@ -28,4 +28,4 @@ clickhouse = { workspace = true }
 [dev-dependencies]
 tokio-test = { workspace = true }
 http-body-util = { workspace = true }
-urlencoding = "2.1"
+urlencoding = "2.1.3"

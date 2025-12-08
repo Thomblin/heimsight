@@ -157,3 +157,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `schema/README.md`: Schema documentation with design decisions and query examples
     - Updated README.md with database setup instructions
   - All 262 tests passing (including new database connectivity test)
+
+### Changed
+
+- **Dependency Upgrades**
+  - Upgraded Rust toolchain from 1.86.0 to 1.91.1
+  - Upgraded axum from 0.8 to 0.8.7
+  - Upgraded tower from 0.5 to 0.5.2
+  - Upgraded tower-http from 0.6 to 0.6.6
+  - Upgraded tonic from 0.12 to 0.14 (breaking change - requires `tonic-prost` crate)
+  - Upgraded prost from 0.13 to 0.14
+  - Upgraded base64 from 0.22 to 0.22.1
+  - Upgraded pbjson from 0.7 to 0.8
+  - Upgraded pbjson-types from 0.7 to 0.8
+  - Upgraded clickhouse from 0.12 to 0.14.1
+  - Upgraded tracing-subscriber from 0.3 to 0.3.20
+  - Upgraded dotenvy from 0.15 to 0.15.7
+  - Upgraded tokio-test from 0.4 to 0.4.4
+  - Upgraded http-body-util from 0.1 to 0.1.3
+  - Upgraded hex from 0.4 to 0.4.3
+  - Upgraded urlencoding from 2.1 to 2.1.3
+  - Added tonic-prost 0.14 runtime dependency (required for tonic 0.14)
+  - Updated build dependencies to tonic-prost-build 0.14 (replaces tonic-build)
+  - Kept nom at 7.1 (nom 8.0 has breaking API changes requiring extensive refactoring)
+  - Updated Default trait implementations to use derive macros (clippy::derivable_impls)

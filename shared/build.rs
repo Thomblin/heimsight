@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let descriptor_path = out_dir.join("proto_descriptor.bin");
 
     // Compile OTLP protobuf definitions with file descriptor output
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_server(true) // Enable gRPC server generation
         .emit_rerun_if_changed(false) // Don't rebuild unless proto files change
         .file_descriptor_set_path(&descriptor_path)

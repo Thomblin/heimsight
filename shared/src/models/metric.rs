@@ -9,12 +9,13 @@ use thiserror::Error;
 use validator::Validate;
 
 /// Type of metric.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum MetricType {
     /// A counter that only increases (e.g., request count).
     Counter,
     /// A gauge that can go up or down (e.g., temperature, memory usage).
+    #[default]
     Gauge,
     /// A histogram for measuring distributions (e.g., request latency).
     Histogram,
@@ -27,12 +28,6 @@ impl std::fmt::Display for MetricType {
             Self::Gauge => write!(f, "gauge"),
             Self::Histogram => write!(f, "histogram"),
         }
-    }
-}
-
-impl Default for MetricType {
-    fn default() -> Self {
-        Self::Gauge
     }
 }
 

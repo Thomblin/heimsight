@@ -11,7 +11,7 @@ use validator::Validate;
 /// Log severity level.
 ///
 /// Follows standard syslog-style severity levels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     /// Detailed debug information.
@@ -19,6 +19,7 @@ pub enum LogLevel {
     /// Debug information.
     Debug,
     /// Informational messages.
+    #[default]
     Info,
     /// Warning conditions.
     Warn,
@@ -38,12 +39,6 @@ impl std::fmt::Display for LogLevel {
             Self::Error => write!(f, "error"),
             Self::Fatal => write!(f, "fatal"),
         }
-    }
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        Self::Info
     }
 }
 

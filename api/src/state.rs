@@ -12,6 +12,7 @@ use std::sync::Arc;
 /// This struct contains all the shared resources needed by the API,
 /// such as storage backends and configuration.
 #[derive(Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct AppState {
     /// The log storage backend.
     log_store: Arc<dyn LogStore>,
