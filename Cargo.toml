@@ -49,7 +49,7 @@ http-body-util = "0.1"
 # OTLP and protobuf
 prost = "0.13"
 prost-types = "0.14"
-tonic = "0.12"
+tonic = "0.14"
 
 # Encoding
 base64 = "0.22"
