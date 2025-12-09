@@ -14,7 +14,7 @@ validator = { workspace = true }
 chrono = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
-nom = "7.1"
+nom = "8.0"
 prost = { workspace = true }
 prost-types = { workspace = true }
 tonic = { workspace = true }
