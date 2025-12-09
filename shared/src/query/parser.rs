@@ -15,8 +15,8 @@ use nom::{
     character::complete::{char, digit1, multispace0, multispace1, none_of},
     combinator::{map, map_res, opt, recognize, value},
     multi::many0,
-    sequence::{delimited, pair, preceded, tuple},
-    IResult,
+    sequence::{delimited, pair, preceded},
+    IResult, Parser,
 };
 use thiserror::Error;
 
@@ -106,16 +106,16 @@ fn query(input: &str) -> IResult<&str, Query> {
     let (input, source) = source(input)?;
     let (input, _) = multispace0(input)?;
 
-    let (input, where_clause) = opt(where_clause)(input)?;
+    let (input, where_clause) = opt(where_clause).parse(input)?;
     let (input, _) = multispace0(input)?;
 
-    let (input, order_by) = opt(order_by)(input)?;
+    let (input, order_by) = opt(order_by).parse(input)?;
     let (input, _) = multispace0(input)?;
 
-    let (input, limit) = opt(limit_clause)(input)?;
+    let (input, limit) = opt(limit_clause).parse(input)?;
     let (input, _) = multispace0(input)?;
 
-    let (input, offset) = opt(offset_clause)(input)?;
+    let (input, offset) = opt(offset_clause).parse(input)?;
     let (input, _) = multispace0(input)?;
 
     Ok((
@@ -139,7 +139,8 @@ fn source(input: &str) -> IResult<&str, Source> {
         value(Source::Logs, tag_no_case("logs")),
         value(Source::Metrics, tag_no_case("metrics")),
         value(Source::Traces, tag_no_case("traces")),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 // ============================================================================
@@ -159,9 +160,10 @@ fn where_expression(input: &str) -> IResult<&str, WhereClause> {
 fn or_expression(input: &str) -> IResult<&str, WhereClause> {
     let (input, first) = and_expression(input)?;
     let (input, rest) = many0(preceded(
-        tuple((multispace1, tag_no_case("OR"), multispace1)),
+        (multispace1, tag_no_case("OR"), multispace1),
         and_expression,
-    ))(input)?;
+    ))
+    .parse(input)?;
 
     let result = rest
         .into_iter()
@@ -177,9 +179,10 @@ fn or_expression(input: &str) -> IResult<&str, WhereClause> {
 fn and_expression(input: &str) -> IResult<&str, WhereClause> {
     let (input, first) = primary_condition(input)?;
     let (input, rest) = many0(preceded(
-        tuple((multispace1, tag_no_case("AND"), multispace1)),
+        (multispace1, tag_no_case("AND"), multispace1),
         primary_condition,
-    ))(input)?;
+    ))
+    .parse(input)?;
 
     let result = rest
         .into_iter()
@@ -193,7 +196,7 @@ fn and_expression(input: &str) -> IResult<&str, WhereClause> {
 }
 
 fn primary_condition(input: &str) -> IResult<&str, WhereClause> {
-    alt((grouped_condition, map(condition, WhereClause::Condition)))(input)
+    alt((grouped_condition, map(condition, WhereClause::Condition))).parse(input)
 }
 
 fn grouped_condition(input: &str) -> IResult<&str, WhereClause> {
@@ -238,13 +241,14 @@ fn comparison_op(input: &str) -> IResult<&str, ComparisonOp> {
         value(ComparisonOp::Contains, tag_no_case("CONTAINS")),
         value(
             ComparisonOp::StartsWith,
-            tuple((tag_no_case("STARTS"), multispace1, tag_no_case("WITH"))),
+            (tag_no_case("STARTS"), multispace1, tag_no_case("WITH")),
         ),
         value(
             ComparisonOp::EndsWith,
-            tuple((tag_no_case("ENDS"), multispace1, tag_no_case("WITH"))),
+            (tag_no_case("ENDS"), multispace1, tag_no_case("WITH")),
         ),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 // ============================================================================
@@ -252,11 +256,11 @@ fn comparison_op(input: &str) -> IResult<&str, ComparisonOp> {
 // ============================================================================
 
 fn query_value(input: &str) -> IResult<&str, Value> {
-    alt((boolean_value, float_value, integer_value, string_value))(input)
+    alt((boolean_value, float_value, integer_value, string_value)).parse(input)
 }
 
 fn string_value(input: &str) -> IResult<&str, Value> {
-    alt((single_quoted_string, double_quoted_string))(input)
+    alt((single_quoted_string, double_quoted_string)).parse(input)
 }
 
 fn single_quoted_string(input: &str) -> IResult<&str, Value> {
@@ -264,7 +268,8 @@ fn single_quoted_string(input: &str) -> IResult<&str, Value> {
         char('\''),
         alt((escaped(none_of("'\\"), '\\', char('\'')), tag(""))),
         char('\''),
-    )(input)?;
+    )
+    .parse(input)?;
     Ok((input, Value::String(s.to_string())))
 }
 
@@ -273,22 +278,25 @@ fn double_quoted_string(input: &str) -> IResult<&str, Value> {
         char('"'),
         alt((escaped(none_of("\"\\"), '\\', char('"')), tag(""))),
         char('"'),
-    )(input)?;
+    )
+    .parse(input)?;
     Ok((input, Value::String(s.to_string())))
 }
 
 fn integer_value(input: &str) -> IResult<&str, Value> {
     let (input, num) = map_res(recognize(pair(opt(char('-')), digit1)), |s: &str| {
         s.parse::<i64>()
-    })(input)?;
+    })
+    .parse(input)?;
     Ok((input, Value::Integer(num)))
 }
 
 fn float_value(input: &str) -> IResult<&str, Value> {
     let (input, num) = map_res(
-        recognize(tuple((opt(char('-')), digit1, char('.'), digit1))),
+        recognize((opt(char('-')), digit1, char('.'), digit1)),
         |s: &str| s.parse::<f64>(),
-    )(input)?;
+    )
+    .parse(input)?;
     Ok((input, Value::Float(num)))
 }
 
@@ -296,7 +304,8 @@ fn boolean_value(input: &str) -> IResult<&str, Value> {
     alt((
         value(Value::Boolean(true), tag_no_case("true")),
         value(Value::Boolean(false), tag_no_case("false")),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 // ============================================================================
@@ -310,7 +319,7 @@ fn order_by(input: &str) -> IResult<&str, OrderBy> {
     let (input, _) = multispace1(input)?;
     let (input, field) = identifier(input)?;
     let (input, _) = multispace0(input)?;
-    let (input, order) = opt(sort_order)(input)?;
+    let (input, order) = opt(sort_order).parse(input)?;
 
     Ok((
         input,
@@ -325,7 +334,8 @@ fn sort_order(input: &str) -> IResult<&str, SortOrder> {
     alt((
         value(SortOrder::Asc, tag_no_case("ASC")),
         value(SortOrder::Desc, tag_no_case("DESC")),
-    ))(input)
+    ))
+    .parse(input)
 }
 
 // ============================================================================
@@ -335,14 +345,14 @@ fn sort_order(input: &str) -> IResult<&str, SortOrder> {
 fn limit_clause(input: &str) -> IResult<&str, usize> {
     let (input, _) = tag_no_case("LIMIT")(input)?;
     let (input, _) = multispace1(input)?;
-    let (input, n) = map_res(digit1, |s: &str| s.parse::<usize>())(input)?;
+    let (input, n) = map_res(digit1, |s: &str| s.parse::<usize>()).parse(input)?;
     Ok((input, n))
 }
 
 fn offset_clause(input: &str) -> IResult<&str, usize> {
     let (input, _) = tag_no_case("OFFSET")(input)?;
     let (input, _) = multispace1(input)?;
-    let (input, n) = map_res(digit1, |s: &str| s.parse::<usize>())(input)?;
+    let (input, n) = map_res(digit1, |s: &str| s.parse::<usize>()).parse(input)?;
     Ok((input, n))
 }
 
