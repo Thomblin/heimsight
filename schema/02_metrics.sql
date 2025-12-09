@@ -3,9 +3,10 @@
 
 USE heimsight;
 
+-- Note: Timestamp stored as Int64 (nanoseconds) for Rust client compatibility
 CREATE TABLE IF NOT EXISTS metrics (
-    -- Core timestamp for time-series
-    timestamp DateTime64(9) NOT NULL,
+    -- Core timestamp (Int64 nanoseconds for Rust client compatibility)
+    timestamp Int64 NOT NULL,
 
     -- Metric identification
     name LowCardinality(String) NOT NULL,
@@ -31,47 +32,7 @@ CREATE TABLE IF NOT EXISTS metrics (
     -- Index for metric name lookups
     INDEX idx_name name TYPE bloom_filter GRANULARITY 1
 ) ENGINE = MergeTree()
-PARTITION BY toYYYYMMDD(timestamp)
+PARTITION BY toYYYYMMDD(toDateTime(timestamp / 1000000000))
 ORDER BY (service, name, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 90 DAY
+TTL toDateTime(timestamp / 1000000000) + INTERVAL 90 DAY
 SETTINGS index_granularity = 8192;
-
--- Materialized view for metric aggregations (5-minute intervals)
-CREATE MATERIALIZED VIEW IF NOT EXISTS metrics_5min_agg
-ENGINE = AggregatingMergeTree()
-PARTITION BY toYYYYMMDD(time_bucket)
-ORDER BY (service, name, time_bucket)
-TTL toDateTime(time_bucket) + INTERVAL 180 DAY
-AS SELECT
-    toStartOfFiveMinutes(timestamp) AS time_bucket,
-    service,
-    name,
-    metric_type,
-    labels,
-    avgState(value) AS avg_value,
-    minState(value) AS min_value,
-    maxState(value) AS max_value,
-    sumState(value) AS sum_value,
-    countState() AS sample_count
-FROM metrics
-GROUP BY time_bucket, service, name, metric_type, labels;
-
--- Materialized view for hourly metric aggregations
-CREATE MATERIALIZED VIEW IF NOT EXISTS metrics_hourly_agg
-ENGINE = AggregatingMergeTree()
-PARTITION BY toYYYYMMDD(hour)
-ORDER BY (service, name, hour)
-TTL toDateTime(hour) + INTERVAL 365 DAY
-AS SELECT
-    toStartOfHour(timestamp) AS hour,
-    service,
-    name,
-    metric_type,
-    labels,
-    avgState(value) AS avg_value,
-    minState(value) AS min_value,
-    maxState(value) AS max_value,
-    sumState(value) AS sum_value,
-    countState() AS sample_count
-FROM metrics
-GROUP BY hour, service, name, metric_type, labels;

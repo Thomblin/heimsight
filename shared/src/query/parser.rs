@@ -447,11 +447,11 @@ mod tests {
 
     #[test]
     fn test_parse_where_float() {
-        let query = parse_query("SELECT * FROM metrics WHERE value = 3.14").unwrap();
+        let query = parse_query("SELECT * FROM metrics WHERE value = 3.5").unwrap();
 
         match query.where_clause {
             Some(WhereClause::Condition(c)) => {
-                assert_eq!(c.value, Value::Float(3.14));
+                assert_eq!(c.value, Value::Float(3.5));
             }
             _ => panic!("Expected single condition"),
         }

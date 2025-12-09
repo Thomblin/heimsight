@@ -296,6 +296,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::float_cmp)]
     async fn test_query_with_aggregation() {
         let (app, state) = {
             let state = AppState::with_in_memory_store();
