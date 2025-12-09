@@ -72,4 +72,4 @@ jobs:
         HEIMSIGHT_DB_NAME: heimsight
         HEIMSIGHT_DB_USER: heimsight
         HEIMSIGHT_DB_PASSWORD: heimsight_dev
-      run: cargo test --verbose
+      run: cargo test --verbose -- --include-ignored

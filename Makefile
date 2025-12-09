@@ -1,4 +1,4 @@
-.PHONY: all build test run-api run-cli clean fmt lint check help
+.PHONY: all build test test-all run-api run-cli clean fmt lint check help
 
 # Default target
 all: check build test
@@ -11,14 +11,15 @@ build:
 build-release:
 	cargo build --release
 
-# Run all tests (skip doctests in generated protobuf code)
+# Run tests (excludes tests that require database)
 test:
-# todo: separate db::tests::test_database_ping to run make test without db
-	docker compose up -d 
-	sleep 2
 	cargo test
 
-
+# Run all tests including database integration tests
+test-all:
+	docker compose up -d
+	sleep 2
+	cargo test -- --include-ignored
 
 # Run tests with output
 test-verbose:
@@ -92,7 +93,8 @@ help:
 	@echo "Targets:"
 	@echo "  build             Build all crates (debug)"
 	@echo "  build-release     Build all crates (release)"
-	@echo "  test              Run all tests"
+	@echo "  test              Run tests (no database required)"
+	@echo "  test-all          Run all tests including database tests"
 	@echo "  test-verbose      Run tests with output"
 	@echo "  run-api           Run API server"
 	@echo "  run-api-debug     Run API server with debug logging"

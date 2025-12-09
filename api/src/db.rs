@@ -166,9 +166,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "requires running ClickHouse instance"]
     async fn test_database_ping() {
         // This test requires a running ClickHouse instance
-        // Skip if ClickHouse is not available (e.g., in CI)
+        // Run with: cargo test -- --ignored
         let config = DatabaseConfig::from_env().expect("Failed to load config");
         let db = Database::new(&config);
 
