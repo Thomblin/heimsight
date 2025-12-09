@@ -324,9 +324,9 @@ impl TraceStore for InMemoryTraceStore {
     }
 }
 
-/// ClickHouse-backed trace store implementation.
+/// `ClickHouse`-backed trace store implementation.
 ///
-/// This implementation stores spans in ClickHouse for production use.
+/// This implementation stores spans in `ClickHouse` for production use.
 /// It provides persistent storage and efficient distributed trace queries.
 #[derive(Clone)]
 pub struct ClickHouseTraceStore {
@@ -334,20 +334,20 @@ pub struct ClickHouseTraceStore {
 }
 
 impl ClickHouseTraceStore {
-    /// Creates a new ClickHouse trace store with the given client.
+    /// Creates a new `ClickHouse` trace store with the given client.
     #[must_use]
     pub fn new(client: Arc<clickhouse::Client>) -> Self {
         Self { client }
     }
 
-    /// Creates a new ClickHouse trace store wrapped in an Arc.
+    /// Creates a new `ClickHouse` trace store wrapped in an Arc.
     #[must_use]
     pub fn new_shared(client: Arc<clickhouse::Client>) -> Arc<Self> {
         Arc::new(Self::new(client))
     }
 
     /// Helper to execute async operations synchronously.
-    fn block_on<F, T>(&self, future: F) -> Result<T, TraceStoreError>
+    fn block_on<F, T>(future: F) -> Result<T, TraceStoreError>
     where
         F: std::future::Future<Output = Result<T, clickhouse::error::Error>>,
     {
@@ -370,7 +370,7 @@ impl TraceStore for ClickHouseTraceStore {
         }
 
         let client = Arc::clone(&self.client);
-        self.block_on(async move {
+        Self::block_on(async move {
             #[derive(clickhouse::Row, serde::Serialize)]
             struct SpanRow {
                 trace_id: String,
@@ -395,7 +395,9 @@ impl TraceStore for ClickHouseTraceStore {
 
             for span in spans {
                 // Calculate duration in nanoseconds
-                let duration_ns = (span.end_time - span.start_time).num_nanoseconds().unwrap_or(0);
+                let duration_ns = (span.end_time - span.start_time)
+                    .num_nanoseconds()
+                    .unwrap_or(0);
 
                 // Convert attributes to Map
                 let attributes: HashMap<String, String> = span
@@ -428,7 +430,7 @@ impl TraceStore for ClickHouseTraceStore {
                     parent_span_id: span.parent_span_id.unwrap_or_default(),
                     start_time: span.start_time.timestamp_nanos_opt().unwrap_or(0),
                     end_time: span.end_time.timestamp_nanos_opt().unwrap_or(0),
-                    duration_ns: duration_ns as u64,
+                    duration_ns: u64::try_from(duration_ns).unwrap_or(0),
                     name: span.name,
                     span_kind: span.kind.to_string(),
                     service: span.service.clone(),
@@ -449,12 +451,35 @@ impl TraceStore for ClickHouseTraceStore {
         })
     }
 
+    #[allow(clippy::too_many_lines)]
     fn get_trace(&self, trace_id: &str) -> Result<Trace, TraceStoreError> {
+        // Define row structure for deserialization
+        #[derive(clickhouse::Row, serde::Deserialize)]
+        #[allow(dead_code)]
+        struct SpanRow {
+            trace_id: String,
+            span_id: String,
+            parent_span_id: String,
+            start_time: i64,
+            end_time: i64,
+            duration_ns: u64,
+            name: String,
+            span_kind: String,
+            service: String,
+            operation: String,
+            status_code: String,
+            status_message: String,
+            attributes: HashMap<String, String>,
+            resource_attributes: HashMap<String, String>,
+            events: Vec<(i64, String, HashMap<String, String>)>,
+            links: Vec<(String, String, HashMap<String, String>)>,
+        }
+
         let trace_id = trace_id.to_string();
         let trace_id_for_error = trace_id.clone();
         let client = Arc::clone(&self.client);
 
-        self.block_on(async move {
+        Self::block_on(async move {
             let sql = format!(
                 "SELECT trace_id, span_id, parent_span_id, \
                  start_time, end_time, duration_ns, name, span_kind, service, operation, \
@@ -464,33 +489,11 @@ impl TraceStore for ClickHouseTraceStore {
                 trace_id.replace('\'', "''")
             );
 
-            #[derive(clickhouse::Row, serde::Deserialize)]
-            #[allow(dead_code)]
-            struct SpanRow {
-                trace_id: String,
-                span_id: String,
-                parent_span_id: String,
-                start_time: i64,
-                end_time: i64,
-                duration_ns: u64,
-                name: String,
-                span_kind: String,
-                service: String,
-                operation: String,
-                status_code: String,
-                status_message: String,
-                attributes: HashMap<String, String>,
-                resource_attributes: HashMap<String, String>,
-                events: Vec<(i64, String, HashMap<String, String>)>,
-                links: Vec<(String, String, HashMap<String, String>)>,
-            }
-
             let rows: Vec<SpanRow> = client.query(&sql).fetch_all::<SpanRow>().await?;
 
             if rows.is_empty() {
                 return Err(clickhouse::error::Error::Custom(format!(
-                    "Trace not found: {}",
-                    trace_id
+                    "Trace not found: {trace_id}"
                 )));
             }
 
@@ -502,14 +505,12 @@ impl TraceStore for ClickHouseTraceStore {
                     let end_time = DateTime::from_timestamp_nanos(row.end_time);
 
                     let status = match row.status_code.as_str() {
-                        "ok" => crate::models::trace::SpanStatus::Ok,
                         "error" => crate::models::trace::SpanStatus::Error,
                         "cancelled" => crate::models::trace::SpanStatus::Cancelled,
                         _ => crate::models::trace::SpanStatus::Ok,
                     };
 
                     let kind = match row.span_kind.as_str() {
-                        "internal" => crate::models::trace::SpanKind::Internal,
                         "server" => crate::models::trace::SpanKind::Server,
                         "client" => crate::models::trace::SpanKind::Client,
                         "producer" => crate::models::trace::SpanKind::Producer,
@@ -572,60 +573,89 @@ impl TraceStore for ClickHouseTraceStore {
         })
     }
 
+    #[allow(clippy::too_many_lines)]
     fn query(&self, query: TraceQuery) -> Result<TraceQueryResult, TraceStoreError> {
+        use std::fmt::Write as _;
+
+        // Define row structure for deserialization
+        #[derive(clickhouse::Row, serde::Deserialize)]
+        #[allow(dead_code)]
+        struct SpanRow {
+            trace_id: String,
+            span_id: String,
+            parent_span_id: String,
+            start_time: i64,
+            end_time: i64,
+            duration_ns: u64,
+            name: String,
+            span_kind: String,
+            service: String,
+            operation: String,
+            status_code: String,
+            status_message: String,
+            attributes: HashMap<String, String>,
+            resource_attributes: HashMap<String, String>,
+            events: Vec<(i64, String, HashMap<String, String>)>,
+            links: Vec<(String, String, HashMap<String, String>)>,
+        }
+
         let client = Arc::clone(&self.client);
 
-        self.block_on(async move {
+        Self::block_on(async move {
             // Build SQL to get unique trace IDs matching filters
             let mut sql = String::from("SELECT DISTINCT trace_id FROM spans WHERE 1=1");
 
             // Add service filter
             if let Some(ref service) = query.service {
-                sql.push_str(&format!(" AND service = '{}'", service.replace('\'', "''")));
+                write!(&mut sql, " AND service = '{}'", service.replace('\'', "''")).unwrap();
             }
 
             // Add time range filters
             if let Some(start) = query.start_time {
-                sql.push_str(&format!(
+                write!(
+                    &mut sql,
                     " AND start_time >= {}",
                     start.timestamp_nanos_opt().unwrap_or(0)
-                ));
+                )
+                .unwrap();
             }
             if let Some(end) = query.end_time {
-                sql.push_str(&format!(
+                write!(
+                    &mut sql,
                     " AND start_time < {}",
                     end.timestamp_nanos_opt().unwrap_or(0)
-                ));
+                )
+                .unwrap();
             }
 
             // Add duration filters
             if let Some(min_duration) = query.min_duration_ms {
-                sql.push_str(&format!(" AND duration_ns >= {}", min_duration * 1_000_000));
+                write!(&mut sql, " AND duration_ns >= {}", min_duration * 1_000_000).unwrap();
             }
             if let Some(max_duration) = query.max_duration_ms {
-                sql.push_str(&format!(" AND duration_ns <= {}", max_duration * 1_000_000));
+                write!(&mut sql, " AND duration_ns <= {}", max_duration * 1_000_000).unwrap();
             }
 
             // Add status filter
             if let Some(ref status) = query.status {
-                sql.push_str(&format!(" AND status_code = '{}'", status.to_string()));
+                write!(&mut sql, " AND status_code = '{status}'").unwrap();
             }
 
             sql.push_str(" ORDER BY trace_id DESC");
 
             // Calculate total count
-            let count_sql = sql.replace("SELECT DISTINCT trace_id FROM spans", "SELECT count(DISTINCT trace_id) FROM spans");
+            let count_sql = sql.replace(
+                "SELECT DISTINCT trace_id FROM spans",
+                "SELECT count(DISTINCT trace_id) FROM spans",
+            );
 
             // Add limit and offset
             let offset = query.offset.unwrap_or(0);
             let limit = query.limit.unwrap_or(100);
-            sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+            write!(&mut sql, " LIMIT {limit} OFFSET {offset}").unwrap();
 
             // Execute count query
-            let total_count: u64 = client
-                .query(&count_sql)
-                .fetch_one::<u64>()
-                .await?;
+            let total_count: u64 = client.query(&count_sql).fetch_one::<u64>().await?;
 
             // Execute main query to get trace IDs
             let trace_ids: Vec<String> = client.query(&sql).fetch_all::<String>().await?;
@@ -643,27 +673,6 @@ impl TraceStore for ClickHouseTraceStore {
                     trace_id.replace('\'', "''")
                 );
 
-                #[derive(clickhouse::Row, serde::Deserialize)]
-                #[allow(dead_code)]
-                struct SpanRow {
-                    trace_id: String,
-                    span_id: String,
-                    parent_span_id: String,
-                    start_time: i64,
-                    end_time: i64,
-                    duration_ns: u64,
-                    name: String,
-                    span_kind: String,
-                    service: String,
-                    operation: String,
-                    status_code: String,
-                    status_message: String,
-                    attributes: HashMap<String, String>,
-                    resource_attributes: HashMap<String, String>,
-                    events: Vec<(i64, String, HashMap<String, String>)>,
-                    links: Vec<(String, String, HashMap<String, String>)>,
-                }
-
                 let rows: Vec<SpanRow> = client.query(&span_sql).fetch_all::<SpanRow>().await?;
 
                 let spans: Vec<Span> = rows
@@ -673,14 +682,12 @@ impl TraceStore for ClickHouseTraceStore {
                         let end_time = DateTime::from_timestamp_nanos(row.end_time);
 
                         let status = match row.status_code.as_str() {
-                            "ok" => crate::models::trace::SpanStatus::Ok,
                             "error" => crate::models::trace::SpanStatus::Error,
                             "cancelled" => crate::models::trace::SpanStatus::Cancelled,
                             _ => crate::models::trace::SpanStatus::Ok,
                         };
 
                         let kind = match row.span_kind.as_str() {
-                            "internal" => crate::models::trace::SpanKind::Internal,
                             "server" => crate::models::trace::SpanKind::Server,
                             "client" => crate::models::trace::SpanKind::Client,
                             "producer" => crate::models::trace::SpanKind::Producer,
@@ -738,40 +745,38 @@ impl TraceStore for ClickHouseTraceStore {
 
             Ok(TraceQueryResult {
                 traces,
-                total_count: total_count as usize,
+                total_count: usize::try_from(total_count).unwrap_or(usize::MAX),
             })
         })
     }
 
     fn span_count(&self) -> Result<usize, TraceStoreError> {
         let client = Arc::clone(&self.client);
-        let count: u64 = self.block_on(async move {
+        let count: u64 = Self::block_on(async move {
             client
                 .query("SELECT count() FROM spans")
                 .fetch_one::<u64>()
                 .await
         })?;
 
-        Ok(count as usize)
+        Ok(usize::try_from(count).unwrap_or(usize::MAX))
     }
 
     fn trace_count(&self) -> Result<usize, TraceStoreError> {
         let client = Arc::clone(&self.client);
-        let count: u64 = self.block_on(async move {
+        let count: u64 = Self::block_on(async move {
             client
                 .query("SELECT count(DISTINCT trace_id) FROM spans")
                 .fetch_one::<u64>()
                 .await
         })?;
 
-        Ok(count as usize)
+        Ok(usize::try_from(count).unwrap_or(usize::MAX))
     }
 
     fn clear(&self) -> Result<(), TraceStoreError> {
         let client = Arc::clone(&self.client);
-        self.block_on(async move {
-            client.query("TRUNCATE TABLE spans").execute().await
-        })
+        Self::block_on(async move { client.query("TRUNCATE TABLE spans").execute().await })
     }
 }
 

@@ -13,7 +13,12 @@ build-release:
 
 # Run all tests (skip doctests in generated protobuf code)
 test:
+# todo: separate db::tests::test_database_ping to run make test without db
+	docker compose up -d 
+	sleep 2
 	cargo test
+
+
 
 # Run tests with output
 test-verbose:

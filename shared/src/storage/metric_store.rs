@@ -347,9 +347,9 @@ impl MetricStore for InMemoryMetricStore {
     }
 }
 
-/// ClickHouse-backed metric store implementation.
+/// `ClickHouse`-backed metric store implementation.
 ///
-/// This implementation stores metrics in ClickHouse for production use.
+/// This implementation stores metrics in `ClickHouse` for production use.
 /// It provides persistent storage and efficient time-series queries with aggregation.
 #[derive(Clone)]
 pub struct ClickHouseMetricStore {
@@ -357,20 +357,20 @@ pub struct ClickHouseMetricStore {
 }
 
 impl ClickHouseMetricStore {
-    /// Creates a new ClickHouse metric store with the given client.
+    /// Creates a new `ClickHouse` metric store with the given client.
     #[must_use]
     pub fn new(client: Arc<clickhouse::Client>) -> Self {
         Self { client }
     }
 
-    /// Creates a new ClickHouse metric store wrapped in an Arc.
+    /// Creates a new `ClickHouse` metric store wrapped in an Arc.
     #[must_use]
     pub fn new_shared(client: Arc<clickhouse::Client>) -> Arc<Self> {
         Arc::new(Self::new(client))
     }
 
     /// Helper to execute async operations synchronously.
-    fn block_on<F, T>(&self, future: F) -> Result<T, MetricStoreError>
+    fn block_on<F, T>(future: F) -> Result<T, MetricStoreError>
     where
         F: std::future::Future<Output = Result<T, clickhouse::error::Error>>,
     {
@@ -393,7 +393,7 @@ impl MetricStore for ClickHouseMetricStore {
         }
 
         let client = Arc::clone(&self.client);
-        self.block_on(async move {
+        Self::block_on(async move {
             #[derive(clickhouse::Row, serde::Serialize)]
             struct MetricRow {
                 timestamp: i64,
@@ -451,33 +451,64 @@ impl MetricStore for ClickHouseMetricStore {
         })
     }
 
+    #[allow(clippy::too_many_lines)]
     fn query(&self, query: MetricQuery) -> Result<MetricQueryResult, MetricStoreError> {
+        use std::fmt::Write as _;
+
+        // Define row structure for deserialization
+        #[derive(clickhouse::Row, serde::Deserialize)]
+        struct MetricRow {
+            timestamp: i64,
+            name: String,
+            metric_type: String,
+            value: f64,
+            labels: HashMap<String, String>,
+            #[allow(dead_code)]
+            service: String,
+            bucket_counts: Vec<u64>,
+            bucket_bounds: Vec<f64>,
+        }
+
         // Build SQL query
         let mut sql = String::from("SELECT timestamp, name, metric_type, value, labels, service, bucket_counts, bucket_bounds FROM metrics WHERE 1=1");
 
         // Add name filter
         if let Some(ref name) = query.name {
-            sql.push_str(&format!(" AND name = '{}'", name.replace('\'', "''")));
+            write!(&mut sql, " AND name = '{}'", name.replace('\'', "''")).unwrap();
         }
 
         // Add type filter
         if let Some(ref metric_type) = query.metric_type {
-            sql.push_str(&format!(" AND metric_type = '{}'", metric_type.to_string()));
+            write!(&mut sql, " AND metric_type = '{metric_type}'").unwrap();
         }
 
         // Add time range filters
         if let Some(start) = query.start_time {
-            sql.push_str(&format!(" AND timestamp >= {}", start.timestamp_nanos_opt().unwrap_or(0)));
+            write!(
+                &mut sql,
+                " AND timestamp >= {}",
+                start.timestamp_nanos_opt().unwrap_or(0)
+            )
+            .unwrap();
         }
         if let Some(end) = query.end_time {
-            sql.push_str(&format!(" AND timestamp < {}", end.timestamp_nanos_opt().unwrap_or(0)));
+            write!(
+                &mut sql,
+                " AND timestamp < {}",
+                end.timestamp_nanos_opt().unwrap_or(0)
+            )
+            .unwrap();
         }
 
         // Add label filters
         for (key, value) in &query.labels {
-            sql.push_str(&format!(" AND labels['{}'] = '{}'", 
-                key.replace('\'', "''"), 
-                value.replace('\'', "''")));
+            write!(
+                &mut sql,
+                " AND labels['{}'] = '{}'",
+                key.replace('\'', "''"),
+                value.replace('\'', "''")
+            )
+            .unwrap();
         }
 
         // Add ordering
@@ -492,31 +523,16 @@ impl MetricStore for ClickHouseMetricStore {
         // Add limit and offset
         let offset = query.offset.unwrap_or(0);
         let limit = query.limit.unwrap_or(1000);
-        sql.push_str(&format!(" LIMIT {} OFFSET {}", limit, offset));
+        write!(&mut sql, " LIMIT {limit} OFFSET {offset}").unwrap();
 
         let client = Arc::clone(&self.client);
         let count_sql_clone = count_sql.clone();
 
-        self.block_on(async move {
+        Self::block_on(async move {
             // Execute count query
-            let total_count: u64 = client
-                .query(&count_sql_clone)
-                .fetch_one::<u64>()
-                .await?;
+            let total_count: u64 = client.query(&count_sql_clone).fetch_one::<u64>().await?;
 
             // Execute main query
-            #[derive(clickhouse::Row, serde::Deserialize)]
-            struct MetricRow {
-                timestamp: i64,
-                name: String,
-                metric_type: String,
-                value: f64,
-                labels: HashMap<String, String>,
-                service: String,
-                bucket_counts: Vec<u64>,
-                bucket_bounds: Vec<f64>,
-            }
-
             let rows: Vec<MetricRow> = client.query(&sql).fetch_all::<MetricRow>().await?;
 
             // Convert rows to Metric
@@ -526,12 +542,13 @@ impl MetricStore for ClickHouseMetricStore {
                     let timestamp = DateTime::from_timestamp_nanos(row.timestamp);
                     let metric_type = match row.metric_type.as_str() {
                         "counter" => MetricType::Counter,
-                        "gauge" => MetricType::Gauge,
                         "histogram" => MetricType::Histogram,
                         _ => MetricType::Gauge,
                     };
 
-                    let value = if !row.bucket_counts.is_empty() {
+                    let value = if row.bucket_counts.is_empty() {
+                        crate::models::metric::MetricValue::Simple(row.value)
+                    } else {
                         // Reconstruct histogram
                         let buckets: Vec<crate::models::metric::HistogramBucket> = row
                             .bucket_bounds
@@ -551,8 +568,6 @@ impl MetricStore for ClickHouseMetricStore {
                                 count,
                             },
                         )
-                    } else {
-                        crate::models::metric::MetricValue::Simple(row.value)
                     };
 
                     Metric {
@@ -569,28 +584,26 @@ impl MetricStore for ClickHouseMetricStore {
 
             Ok(MetricQueryResult {
                 metrics,
-                total_count: total_count as usize,
+                total_count: usize::try_from(total_count).unwrap_or(usize::MAX),
             })
         })
     }
 
     fn count(&self) -> Result<usize, MetricStoreError> {
         let client = Arc::clone(&self.client);
-        let count: u64 = self.block_on(async move {
+        let count: u64 = Self::block_on(async move {
             client
                 .query("SELECT count() FROM metrics")
                 .fetch_one::<u64>()
                 .await
         })?;
 
-        Ok(count as usize)
+        Ok(usize::try_from(count).unwrap_or(usize::MAX))
     }
 
     fn clear(&self) -> Result<(), MetricStoreError> {
         let client = Arc::clone(&self.client);
-        self.block_on(async move {
-            client.query("TRUNCATE TABLE metrics").execute().await
-        })
+        Self::block_on(async move { client.query("TRUNCATE TABLE metrics").execute().await })
     }
 
     fn aggregate(
@@ -598,6 +611,15 @@ impl MetricStore for ClickHouseMetricStore {
         query: MetricQuery,
         function: AggregationFunction,
     ) -> Result<AggregationResult, MetricStoreError> {
+        use std::fmt::Write as _;
+
+        // Define row structure for deserialization
+        #[derive(clickhouse::Row, serde::Deserialize)]
+        struct AggRow {
+            agg_value: f64,
+            sample_count: u64,
+        }
+
         // Build SQL query with aggregation
         let agg_func = match function {
             AggregationFunction::Sum => "sum(value)",
@@ -607,49 +629,57 @@ impl MetricStore for ClickHouseMetricStore {
             AggregationFunction::Count => "count()",
         };
 
-        let mut sql = format!("SELECT {} as agg_value, count() as sample_count FROM metrics WHERE 1=1", agg_func);
+        let mut sql = format!(
+            "SELECT {agg_func} as agg_value, count() as sample_count FROM metrics WHERE 1=1"
+        );
 
         // Add name filter
         if let Some(ref name) = query.name {
-            sql.push_str(&format!(" AND name = '{}'", name.replace('\'', "''")));
+            write!(&mut sql, " AND name = '{}'", name.replace('\'', "''")).unwrap();
         }
 
         // Add type filter
         if let Some(ref metric_type) = query.metric_type {
-            sql.push_str(&format!(" AND metric_type = '{}'", metric_type.to_string()));
+            write!(&mut sql, " AND metric_type = '{metric_type}'").unwrap();
         }
 
         // Add time range filters
         if let Some(start) = query.start_time {
-            sql.push_str(&format!(" AND timestamp >= {}", start.timestamp_nanos_opt().unwrap_or(0)));
+            write!(
+                &mut sql,
+                " AND timestamp >= {}",
+                start.timestamp_nanos_opt().unwrap_or(0)
+            )
+            .unwrap();
         }
         if let Some(end) = query.end_time {
-            sql.push_str(&format!(" AND timestamp < {}", end.timestamp_nanos_opt().unwrap_or(0)));
+            write!(
+                &mut sql,
+                " AND timestamp < {}",
+                end.timestamp_nanos_opt().unwrap_or(0)
+            )
+            .unwrap();
         }
 
         // Add label filters
         for (key, value) in &query.labels {
-            sql.push_str(&format!(
+            write!(
+                &mut sql,
                 " AND labels['{}'] = '{}'",
                 key.replace('\'', "''"),
                 value.replace('\'', "''")
-            ));
+            )
+            .unwrap();
         }
 
         let client = Arc::clone(&self.client);
 
-        self.block_on(async move {
-            #[derive(clickhouse::Row, serde::Deserialize)]
-            struct AggRow {
-                agg_value: f64,
-                sample_count: u64,
-            }
-
+        Self::block_on(async move {
             let row: AggRow = client.query(&sql).fetch_one::<AggRow>().await?;
 
             Ok(AggregationResult {
                 value: row.agg_value,
-                count: row.sample_count as usize,
+                count: usize::try_from(row.sample_count).unwrap_or(usize::MAX),
             })
         })
     }
@@ -794,6 +824,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_aggregation_sum() {
         let store = InMemoryMetricStore::new();
         store.insert(create_test_metric("value", 10.0)).unwrap();
@@ -809,6 +840,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_aggregation_avg() {
         let store = InMemoryMetricStore::new();
         store.insert(create_test_metric("value", 10.0)).unwrap();
@@ -823,6 +855,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_aggregation_min_max() {
         let store = InMemoryMetricStore::new();
         store.insert(create_test_metric("value", 10.0)).unwrap();
@@ -841,6 +874,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_aggregation_with_filter() {
         let store = InMemoryMetricStore::new();
         store

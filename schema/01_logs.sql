@@ -3,9 +3,10 @@
 
 USE heimsight;
 
+-- Note: Timestamp stored as Int64 (nanoseconds) for Rust client compatibility
 CREATE TABLE IF NOT EXISTS logs (
-    -- Core timestamp field for time-series partitioning
-    timestamp DateTime64(9) NOT NULL,
+    -- Core timestamp field (Int64 nanoseconds for Rust client compatibility)
+    timestamp Int64 NOT NULL,
 
     -- Tracing correlation fields
     trace_id String DEFAULT '',
@@ -23,23 +24,7 @@ CREATE TABLE IF NOT EXISTS logs (
     INDEX idx_trace_id trace_id TYPE bloom_filter GRANULARITY 1,
     INDEX idx_message message TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1
 ) ENGINE = MergeTree()
-PARTITION BY toYYYYMMDD(timestamp)
+PARTITION BY toYYYYMMDD(toDateTime(timestamp / 1000000000))
 ORDER BY (service, level, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 30 DAY
+TTL toDateTime(timestamp / 1000000000) + INTERVAL 30 DAY
 SETTINGS index_granularity = 8192;
-
--- Materialized view for log level counts by service (aggregation)
-CREATE MATERIALIZED VIEW IF NOT EXISTS logs_hourly_stats
-ENGINE = SummingMergeTree()
-PARTITION BY toYYYYMMDD(hour)
-ORDER BY (service, level, hour)
-TTL toDateTime(hour) + INTERVAL 90 DAY
-AS SELECT
-    toStartOfHour(timestamp) AS hour,
-    service,
-    level,
-    count() AS log_count,
-    uniqExact(trace_id) AS unique_traces
-FROM logs
-WHERE trace_id != ''
-GROUP BY hour, service, level;

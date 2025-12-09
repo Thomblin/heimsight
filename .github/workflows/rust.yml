@@ -14,11 +14,62 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    services:
+      clickhouse:
+        image: clickhouse/clickhouse-server:24.11
+        ports:
+          - 8123:8123
+          - 9000:9000
+        env:
+          CLICKHOUSE_DB: heimsight
+          CLICKHOUSE_USER: heimsight
+          CLICKHOUSE_PASSWORD: heimsight_dev
+          CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+        options: >-
+          --health-cmd "clickhouse-client --query 'SELECT 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - uses: actions/checkout@v4
+    
     - name: Install Protoc
       uses: arduino/setup-protoc@v3
+    
+    - name: Wait for ClickHouse
+      run: |
+        timeout 60 bash -c 'until curl -s http://localhost:8123/ping > /dev/null; do sleep 1; done'
+        echo "ClickHouse is ready"
+    
+    - name: Create Database
+      run: |
+        echo "Creating database heimsight..."
+        curl -X POST 'http://localhost:8123/' \
+          --user 'heimsight:heimsight_dev' \
+          --data "CREATE DATABASE IF NOT EXISTS heimsight"
+    
+    - name: Initialize ClickHouse Schema
+      run: |
+        for schema_file in schema/*.sql; do
+          echo "Executing $schema_file"
+          curl -X POST 'http://localhost:8123/' \
+            --user 'heimsight:heimsight_dev' \
+            --data-binary @"$schema_file"
+          if [ $? -ne 0 ]; then
+            echo "Failed to execute $schema_file"
+            exit 1
+          fi
+        done
+        echo "Schema initialization completed successfully"
+    
     - name: Build
       run: cargo build --verbose
+    
     - name: Run tests
+      env:
+        HEIMSIGHT_DB_URL: http://localhost:8123
+        HEIMSIGHT_DB_NAME: heimsight
+        HEIMSIGHT_DB_USER: heimsight
+        HEIMSIGHT_DB_PASSWORD: heimsight_dev
       run: cargo test --verbose

@@ -49,7 +49,7 @@ use tower_http::trace::TraceLayer;
 /// and starts listening for incoming connections. It handles graceful shutdown on
 /// SIGTERM/SIGINT signals.
 ///
-/// The server will attempt to connect to ClickHouse using the database configuration.
+/// The server will attempt to connect to `ClickHouse` using the database configuration.
 /// If the connection succeeds, it will use persistent ClickHouse-backed stores.
 /// If the connection fails, it will fall back to in-memory stores with a warning.
 ///
@@ -61,7 +61,7 @@ use tower_http::trace::TraceLayer;
 /// - A fatal error occurs during operation
 pub async fn run_server() -> Result<()> {
     let config = Config::from_env()?;
-    
+
     // Try to initialize database connection
     let state = match db::DatabaseConfig::from_env() {
         Ok(db_config) => {
@@ -91,7 +91,7 @@ pub async fn run_server() -> Result<()> {
             AppState::with_in_memory_store()
         }
     };
-    
+
     run_server_with_config_and_state(config, state).await
 }
 
