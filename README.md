@@ -2,15 +2,44 @@
 
 A self-hosted, full-stack observability platform built in Rust.
 
-Heimsight provides unified logs, traces, metrics, and alerting with a focus on simplicity, performance, and horizontal scalability. The name combines "Heim" (from Heimdall, the Norse guardian) with "sight," representing clear visibility into your systems.
+**Heimsight** is a self-hosted, full-stack observability platform built in Rust. It provides unified logs, traces, metrics, and alerting with a focus on simplicity, performance, and horizontal scalability. The name combines "Heim" (from Heimdall, the Norse guardian) with "sight," representing clear visibility into your systems.
+
+## Current Status
+
+**🚧 Active Development - Core Features Complete**
+
+Heimsight is currently in active development with core observability features fully implemented and production-ready. The platform includes complete OTLP support, persistent storage, and dynamic retention management.
+
+### ✅ Implemented (Production-Ready)
+
+- Full OpenTelemetry Protocol (OTLP) support (gRPC + HTTP)
+- Logs ingestion, storage, and querying with full-text search
+- Metrics ingestion, storage, and querying (counter, gauge, histogram)
+- Distributed traces ingestion, storage, and querying
+- SQL-like query language for exploring data
+- ClickHouse persistent storage with automatic TTL
+- Dynamic retention policy management with automatic database updates
+- Data age monitoring and metrics
+- REST API with comprehensive filtering and pagination
+- Basic CLI for health checks
+
+### 🚧 In Development
+
+- Web UI dashboard
+- Alerting engine and notification channels
+- Grafana datasource plugin
+- Data aggregation for long-term storage
+- Advanced CLI commands
+- Anomaly detection
 
 ## Features
 
-- **OTLP-Native** - Full OpenTelemetry Protocol compliance for logs, metrics, and traces
+- **OTLP-Native** - Full OpenTelemetry Protocol compliance for logs, metrics, and traces (gRPC + HTTP)
 - **SQL-Like Queries** - Familiar query syntax for exploring your data
-- **Unified Platform** - Logs, metrics, traces, and alerting in one place
-- **Horizontal Scaling** - Designed for single-node but scales to distributed deployment
-- **Multiple Interfaces** - REST API, Web UI, CLI, and Grafana-compatible datasource
+- **ClickHouse Storage** - High-performance columnar database for time-series data
+- **Dynamic Retention** - Update TTL policies via API with automatic database updates
+- **Persistent Storage** - All data persists in ClickHouse with automatic TTL enforcement
+- **REST API** - Comprehensive API for all operations with filtering and pagination
 
 ## Project Structure
 
@@ -251,14 +280,35 @@ GET /api/v1/config/retention/metrics
 
 See `examples/config_retention.http` for more examples.
 
+## Architecture
+
+Heimsight uses a modular architecture:
+
+- **API Server** (`api/`) - Axum-based REST API and gRPC server
+  - HTTP endpoints for logs, metrics, traces, and queries
+  - OTLP gRPC services for OpenTelemetry compatibility
+  - Retention policy management
+  - Data age monitoring
+  
+- **Shared Library** (`shared/`) - Common types and utilities
+  - Data models for logs, metrics, and traces
+  - Storage trait abstractions (in-memory and ClickHouse)
+  - OTLP protocol conversion
+  - SQL-like query parser and executor
+  - Retention configuration
+  
+- **CLI** (`cli/`) - Command-line interface
+  - Health check command
+  - Future: query, ingestion, and management commands
+
 ## Development
 
-This project follows Test-Driven Development (TDD). See `CLAUDE_INSTRUCTIONS.md` for development workflow and coding standards.
+This project follows Test-Driven Development (TDD). See `CLAUDE.md` for development workflow and coding standards.
 
 ### Running Tests
 
 ```bash
-# All tests
+# All tests (293 tests)
 cargo test
 
 # With output
@@ -266,7 +316,46 @@ cargo test -- --nocapture
 
 # Specific crate
 cargo test -p api
+cargo test -p shared
+
+# Integration tests only
+cargo test --test integration_tests
 ```
+
+### Development Workflow
+
+```bash
+# Run linting
+cargo clippy -- -D warnings
+
+# Format code
+cargo fmt
+
+# Run both API and gRPC servers
+make run-api-debug
+
+# Watch for changes and rebuild
+cargo watch -x "test -p api"
+```
+
+## Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+1. **Tests First** - Write tests before implementing features (TDD)
+2. **Linting** - Ensure `cargo clippy -- -D warnings` passes
+3. **Formatting** - Run `cargo fmt` before committing
+4. **Documentation** - Update relevant docs (README, CHANGELOG, code comments)
+
+See `CLAUDE.md` for detailed coding standards and workflow.
+
+## Roadmap
+
+See `PROJECT.md` for the complete implementation roadmap. Major upcoming features:
+
+- **Phase 4**: Alerting & Notifications (threshold, anomaly, pattern matching)
+- **Phase 5**: User Interfaces (Web UI, enhanced CLI, Grafana integration)
+- **Phase 6**: Production Readiness (performance optimization, horizontal scaling, security)
 
 ## License
 

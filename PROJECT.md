@@ -622,11 +622,17 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Store aggregated data separately
 - Query engine uses aggregated data for old time ranges
 - Add configuration for aggregation policies
+- **Write unit tests** for aggregation logic and rules
+- **Write integration tests** for end-to-end aggregation workflow
+- **Create examples/aggregation.http** for testing aggregation configuration API
+- **Update README.md** to reflect aggregation feature availability
 
 **Acceptance Criteria:**
 - Old metrics are aggregated
 - Log counts are aggregated by level/service
 - Queries seamlessly use aggregated data
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -642,12 +648,14 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Support rule types: threshold, pattern match
 - Create `AlertRuleStore` for persistence
 - Add validation for rule definitions
-- Write unit tests
+- **Write unit tests** for AlertRule validation and serialization
+- **Write unit tests** for AlertRuleStore operations
 
 **Acceptance Criteria:**
 - Rules can be serialized/persisted
 - Validation catches invalid rules
 - Multiple condition types supported
+- All unit tests pass
 
 ---
 
@@ -662,12 +670,17 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add `GET /api/v1/alerts/rules/{id}` - get rule
 - Add `PUT /api/v1/alerts/rules/{id}` - update rule
 - Add `DELETE /api/v1/alerts/rules/{id}` - delete rule
-- Write integration tests
+- **Write unit tests** for route handlers
+- **Write integration tests** for end-to-end CRUD operations
+- **Create examples/alerts.http** for manual API testing
+- **Update README.md** API endpoints table with alert routes
 
 **Acceptance Criteria:**
 - Full CRUD works
 - Rules persist across restarts
 - Validation on create/update
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -682,12 +695,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Evaluate pattern rules against logs
 - Track alert state (pending, firing, resolved)
 - Implement alert deduplication
-- Write tests for evaluation logic
+- **Write unit tests** for evaluation logic and rule matching
+- **Write integration tests** for alert lifecycle (fire → resolve)
+- **Update README.md** to describe alert evaluation features
 
 **Acceptance Criteria:**
 - Alerts fire when conditions met
 - Alerts resolve when conditions clear
 - No duplicate alerts for same condition
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -702,12 +719,17 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add configuration for webhook URLs
 - Include alert details in payload
 - Add retry logic for failed deliveries
-- Write tests with mock webhook server
+- **Write unit tests** for WebhookChannel and retry logic
+- **Write integration tests** with mock webhook server
+- **Create examples/webhooks.http** for webhook payload examples
+- **Update README.md** to document webhook notification feature
 
 **Acceptance Criteria:**
 - Webhooks fire on alert
 - Payload includes all alert details
 - Failed webhooks are retried
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -721,12 +743,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Implement `DiscordChannel` with webhooks
 - Format messages nicely for each platform
 - Add configuration for channel webhooks
-- Write integration tests
+- **Write unit tests** for message formatting
+- **Write integration tests** with mock Slack/Discord webhooks
+- **Update README.md** to document chat notification features
 
 **Acceptance Criteria:**
 - Slack messages are well-formatted
 - Discord messages are well-formatted
 - Configuration is straightforward
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -740,12 +766,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add SMTP configuration (host, port, auth)
 - Create HTML email templates
 - Add recipient configuration
-- Write tests with mock SMTP
+- **Write unit tests** for email template rendering
+- **Write integration tests** with mock SMTP server
+- **Update README.md** to document email notification configuration
 
 **Acceptance Criteria:**
 - Emails send via SMTP
 - HTML formatting looks good
 - Multiple recipients supported
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -759,12 +789,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Implement `OpsgenieChannel` using REST API
 - Map alert severity to platform priorities
 - Handle acknowledge/resolve events
-- Write integration tests
+- **Write unit tests** for severity mapping and event handling
+- **Write integration tests** with mock PagerDuty/Opsgenie APIs
+- **Update README.md** to document incident management integrations
 
 **Acceptance Criteria:**
 - Incidents created in PagerDuty/Opsgenie
 - Severity correctly mapped
 - Resolved alerts close incidents
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -781,12 +815,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add basic commands structure
 - Implement `health` command
 - Add output formatting (table, JSON)
-- Write tests for CLI parsing
+- **Write unit tests** for CLI parsing and command structure
+- **Write integration tests** for health command against test server
+- **Update README.md** with CLI usage examples and commands
 
 **Acceptance Criteria:**
 - CLI builds and runs
 - `heimsight health` works
 - Help text is clear
+- All tests pass (unit + integration)
+- Documentation updated
 
 ---
 
@@ -802,11 +840,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add `heimsight query` for SQL-like queries
 - Support output formats: table, JSON, CSV
 - Add streaming/follow mode for logs
+- **Write unit tests** for output formatting (table, JSON, CSV)
+- **Write integration tests** for each query command
+- **Update README.md** with CLI query examples and usage
 
 **Acceptance Criteria:**
 - All query commands work
 - Output is well-formatted
 - Follow mode streams new logs
+- All tests pass (unit + integration)
+- Documentation updated with examples
 
 ---
 
@@ -821,12 +864,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add `heimsight alerts delete` command
 - Add `heimsight config` for server configuration
 - Add `heimsight status` for system overview
-- Write tests
+- **Write unit tests** for command parsing and validation
+- **Write integration tests** for each management command
+- **Update README.md** with CLI management examples
 
 **Acceptance Criteria:**
 - Can manage alerts from CLI
 - Can view system status
 - Commands have helpful error messages
+- All tests pass (unit + integration)
+- Documentation updated with examples
 
 ---
 
@@ -842,11 +889,15 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Create home page with navigation
 - Add `/ui/` routes for web interface
 - Style with simple CSS (no framework)
+- **Write integration tests** for UI routes and rendering
+- **Update README.md** to document Web UI availability and features
 
 **Acceptance Criteria:**
 - Web UI accessible at /ui/
 - Navigation works
 - Looks clean and functional
+- All integration tests pass
+- Documentation updated with screenshots/usage
 
 ---
 
@@ -862,11 +913,15 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add search functionality
 - Add time range picker
 - Implement with HTMX for interactivity
+- **Write integration tests** for log explorer functionality
+- **Update README.md** to document log explorer features
 
 **Acceptance Criteria:**
 - Can browse logs in browser
 - Filters work without page reload
 - Real-time updates work
+- All integration tests pass
+- Documentation updated with usage instructions
 
 ---
 
@@ -881,11 +936,15 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add metric detail view with history
 - Add time range selection
 - Add label filtering
+- **Write integration tests** for metrics dashboard functionality
+- **Update README.md** to document metrics dashboard features
 
 **Acceptance Criteria:**
 - Can view metrics in browser
 - Charts display metric history
 - Filters work interactively
+- All integration tests pass
+- Documentation updated with usage instructions
 
 ---
 
@@ -900,11 +959,15 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add waterfall/timeline visualization
 - Show span details on click
 - Add trace search
+- **Write integration tests** for trace viewer functionality
+- **Update README.md** to document trace viewer features
 
 **Acceptance Criteria:**
 - Can browse traces
 - Span tree visualization works
 - Timing visualization is clear
+- All integration tests pass
+- Documentation updated with usage instructions
 
 ---
 
@@ -919,11 +982,15 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Show alert history
 - Add alert status indicators
 - Add notification channel configuration
+- **Write integration tests** for alert management UI
+- **Update README.md** to document alert management UI
 
 **Acceptance Criteria:**
 - Can manage alert rules in browser
 - Forms validate input
 - Alert status is visible
+- All integration tests pass
+- Documentation updated with usage instructions
 
 ---
 
@@ -937,12 +1004,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Support metric queries from Grafana
 - Support log queries (Explore)
 - Document setup in Grafana
-- Write integration tests
+- **Write unit tests** for datasource query translation
+- **Write integration tests** with Grafana test framework
+- **Update README.md** with Grafana integration instructions
 
 **Acceptance Criteria:**
 - Grafana can add Heimsight as datasource
 - Metric queries work in dashboards
 - Log queries work in Explore
+- All tests pass (unit + integration)
+- Documentation includes setup guide
 
 ---
 
@@ -958,12 +1029,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add anomaly-based alert rules
 - Store baseline statistics
 - Add anomaly scores to metrics
-- Write tests for detection accuracy
+- **Write unit tests** for anomaly detection algorithms
+- **Write integration tests** for anomaly-based alerts
+- **Update README.md** to document anomaly detection features
 
 **Acceptance Criteria:**
 - Can detect metric anomalies
 - Alerts fire on anomalies
 - False positive rate is acceptable
+- All tests pass (unit + integration)
+- Documentation updated with algorithm details
 
 ---
 
@@ -979,11 +1054,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Implement connection pooling tuning
 - Add caching where beneficial
 - Document performance characteristics
+- **Write benchmark tests** using criterion.rs
+- **Write load tests** for sustained high throughput
+- **Update README.md** with performance characteristics and benchmarks
 
 **Acceptance Criteria:**
 - Ingestion handles 10k+ events/second
 - Query latency is under 100ms (simple queries)
 - Memory usage is predictable
+- All benchmarks documented
+- Performance guide in documentation
 
 ---
 
@@ -998,11 +1078,15 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Document load balancer setup
 - Test with multiple instances
 - Add distributed tracing for Heimsight itself
+- **Write integration tests** for multi-instance scenarios
+- **Update README.md** with scaling guide and architecture diagrams
 
 **Acceptance Criteria:**
 - Multiple instances can run behind LB
 - Alerts don't duplicate across instances
 - No data loss on instance restart
+- All integration tests pass
+- Scaling documentation complete
 
 ---
 
@@ -1018,11 +1102,15 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Document environment variables
 - Add example AWS ECS task definition
 - Add example Kubernetes manifests
+- **Write integration tests** for Docker deployment
+- **Update README.md** with deployment guides for Docker, ECS, and K8s
 
 **Acceptance Criteria:**
 - Docker image is small and secure
 - docker-compose brings up full system
 - Deployment docs are clear
+- All deployment examples tested
+- Comprehensive deployment documentation
 
 ---
 
@@ -1037,11 +1125,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add structured logging with tracing
 - Document operational runbook
 - Add alerting for Heimsight health
+- **Write integration tests** for Prometheus endpoint
+- **Create examples/prometheus.http** for metrics endpoint testing
+- **Update README.md** with self-monitoring documentation
 
 **Acceptance Criteria:**
 - Prometheus can scrape Heimsight
 - Key operational metrics available
 - Runbook covers common issues
+- All integration tests pass
+- Complete monitoring documentation
 
 ---
 
@@ -1057,11 +1150,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Security audit of all endpoints
 - Add TLS termination documentation
 - Run `cargo audit` clean
+- **Write unit tests** for authentication and rate limiting
+- **Write integration tests** for security features
+- **Update README.md** with security configuration guide
 
 **Acceptance Criteria:**
 - API keys work when enabled
 - Rate limiting prevents abuse
 - No security vulnerabilities
+- All tests pass (unit + integration)
+- Security documentation complete
 
 ---
 
@@ -1077,11 +1175,16 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 - Add operator guide
 - Add developer guide for contributors
 - Add example dashboards and alerts
+- **Create examples/openapi.yaml** for API specification
+- **Write documentation tests** to ensure examples work
+- **Final README.md review** to ensure all features documented
 
 **Acceptance Criteria:**
 - New users can get started easily
-- API is fully documented
+- API is fully documented with OpenAPI spec
 - Operators have clear guides
+- All documentation examples tested
+- README reflects complete feature set
 
 ---
 
@@ -1137,11 +1240,11 @@ HEIMSIGHT_DB_URL=mongodb://localhost:27017/heimsight
 
 1. **Complete one step at a time** - Each step is designed to be a single session of work
 2. **Mark steps complete** - Update the `[ ]` to `[x]` when done
-3. **Follow CLAUDE_INSTRUCTIONS.md** - TDD, linting, documentation requirements apply
+3. **Follow CLAUDE.md** - TDD, linting, documentation requirements apply
 4. **Tests first** - Write failing tests before implementation
 5. **Ask if unclear** - Requirements can be clarified before implementing
 6. **Keep it simple** - MVP first, enhance later
 
 ---
 
-**Last Updated:** 2025-12-07
+**Last Updated:** 2025-12-09
