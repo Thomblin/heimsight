@@ -151,6 +151,20 @@ pub trait LogStore: Send + Sync {
     ///
     /// Returns an error if the clear operation fails.
     fn clear(&self) -> Result<(), LogStoreError>;
+
+    /// Returns the timestamp of the oldest log entry in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, LogStoreError>;
+
+    /// Returns the timestamp of the newest log entry in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, LogStoreError>;
 }
 
 /// In-memory log store implementation.
@@ -286,6 +300,16 @@ impl LogStore for InMemoryLogStore {
         let mut logs = self.logs.write().map_err(|_| LogStoreError::LockError)?;
         logs.clear();
         Ok(())
+    }
+
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, LogStoreError> {
+        let logs = self.logs.read().map_err(|_| LogStoreError::LockError)?;
+        Ok(logs.iter().map(|log| log.timestamp).min())
+    }
+
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, LogStoreError> {
+        let logs = self.logs.read().map_err(|_| LogStoreError::LockError)?;
+        Ok(logs.iter().map(|log| log.timestamp).max())
     }
 }
 
@@ -517,6 +541,24 @@ impl LogStore for ClickHouseLogStore {
     fn clear(&self) -> Result<(), LogStoreError> {
         let client = Arc::clone(&self.client);
         Self::block_on(async move { client.query("TRUNCATE TABLE logs").execute().await })
+    }
+
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, LogStoreError> {
+        let client = Arc::clone(&self.client);
+        Self::block_on(async move {
+            let sql = "SELECT min(timestamp) FROM logs";
+            let result: Option<i64> = client.query(sql).fetch_optional::<i64>().await?;
+            Ok(result.map(DateTime::from_timestamp_nanos))
+        })
+    }
+
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, LogStoreError> {
+        let client = Arc::clone(&self.client);
+        Self::block_on(async move {
+            let sql = "SELECT max(timestamp) FROM logs";
+            let result: Option<i64> = client.query(sql).fetch_optional::<i64>().await?;
+            Ok(result.map(DateTime::from_timestamp_nanos))
+        })
     }
 }
 

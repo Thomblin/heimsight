@@ -187,6 +187,20 @@ pub trait MetricStore: Send + Sync {
         query: MetricQuery,
         function: AggregationFunction,
     ) -> Result<AggregationResult, MetricStoreError>;
+
+    /// Returns the timestamp of the oldest metric in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, MetricStoreError>;
+
+    /// Returns the timestamp of the newest metric in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, MetricStoreError>;
 }
 
 /// In-memory metric store implementation.
@@ -344,6 +358,22 @@ impl MetricStore for InMemoryMetricStore {
             value,
             count: values.len(),
         })
+    }
+
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, MetricStoreError> {
+        let metrics = self
+            .metrics
+            .read()
+            .map_err(|_| MetricStoreError::LockError)?;
+        Ok(metrics.iter().map(|m| m.timestamp).min())
+    }
+
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, MetricStoreError> {
+        let metrics = self
+            .metrics
+            .read()
+            .map_err(|_| MetricStoreError::LockError)?;
+        Ok(metrics.iter().map(|m| m.timestamp).max())
     }
 }
 
@@ -681,6 +711,24 @@ impl MetricStore for ClickHouseMetricStore {
                 value: row.agg_value,
                 count: usize::try_from(row.sample_count).unwrap_or(usize::MAX),
             })
+        })
+    }
+
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, MetricStoreError> {
+        let client = Arc::clone(&self.client);
+        Self::block_on(async move {
+            let sql = "SELECT min(timestamp) FROM metrics";
+            let result: Option<i64> = client.query(sql).fetch_optional::<i64>().await?;
+            Ok(result.map(DateTime::from_timestamp_nanos))
+        })
+    }
+
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, MetricStoreError> {
+        let client = Arc::clone(&self.client);
+        Self::block_on(async move {
+            let sql = "SELECT max(timestamp) FROM metrics";
+            let result: Option<i64> = client.query(sql).fetch_optional::<i64>().await?;
+            Ok(result.map(DateTime::from_timestamp_nanos))
         })
     }
 }

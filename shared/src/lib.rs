@@ -27,6 +27,7 @@
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
 
+pub mod config;
 pub mod models;
 pub mod otlp;
 pub mod query;

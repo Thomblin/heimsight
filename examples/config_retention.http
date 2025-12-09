@@ -1,0 +1,259 @@
+# Heimsight API - Retention Configuration Examples
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+
+@baseUrl = http://localhost:8080
+
+###############################################################################
+# RETENTION CONFIGURATION (GET /api/v1/config/retention)
+###############################################################################
+
+### Get Current Retention Configuration
+# Returns the current TTL policies for logs, metrics, and traces
+GET {{baseUrl}}/api/v1/config/retention
+
+###############################################################################
+# UPDATE COMPLETE RETENTION CONFIGURATION (PUT /api/v1/config/retention)
+###############################################################################
+
+### Update Complete Retention Configuration
+# Updates all retention policies at once
+PUT {{baseUrl}}/api/v1/config/retention
+Content-Type: application/json
+
+{
+    "logs": {
+        "data_type": "logs",
+        "ttl_days": 30
+    },
+    "metrics": {
+        "data_type": "metrics",
+        "ttl_days": 80
+    },
+    "traces": {
+        "data_type": "traces",
+        "ttl_days": 30
+    }
+}
+
+### Update Retention Configuration - Extended Retention
+# Increase retention periods for all data types
+PUT {{baseUrl}}/api/v1/config/retention
+Content-Type: application/json
+
+{
+    "logs": {
+        "data_type": "logs",
+        "ttl_days": 60
+    },
+    "metrics": {
+        "data_type": "metrics",
+        "ttl_days": 180
+    },
+    "traces": {
+        "data_type": "traces",
+        "ttl_days": 45
+    }
+}
+
+### Update Retention Configuration - Short Retention
+# Reduce retention periods for testing or development
+PUT {{baseUrl}}/api/v1/config/retention
+Content-Type: application/json
+
+{
+    "logs": {
+        "data_type": "logs",
+        "ttl_days": 7
+    },
+    "metrics": {
+        "data_type": "metrics",
+        "ttl_days": 30
+    },
+    "traces": {
+        "data_type": "traces",
+        "ttl_days": 7
+    }
+}
+
+### Update Retention Configuration - Long-term Retention
+# Configure long-term retention (1 year for metrics)
+PUT {{baseUrl}}/api/v1/config/retention
+Content-Type: application/json
+
+{
+    "logs": {
+        "data_type": "logs",
+        "ttl_days": 90
+    },
+    "metrics": {
+        "data_type": "metrics",
+        "ttl_days": 365
+    },
+    "traces": {
+        "data_type": "traces",
+        "ttl_days": 90
+    }
+}
+
+###############################################################################
+# UPDATE SINGLE RETENTION POLICY (PUT /api/v1/config/retention/policy)
+###############################################################################
+
+### Update Logs Retention Policy Only
+# Change only the logs retention period
+PUT {{baseUrl}}/api/v1/config/retention/policy
+Content-Type: application/json
+
+{
+    "data_type": "logs",
+    "ttl_days": 45
+}
+
+### Update Metrics Retention Policy Only
+# Change only the metrics retention period
+PUT {{baseUrl}}/api/v1/config/retention/policy
+Content-Type: application/json
+
+{
+    "data_type": "metrics",
+    "ttl_days": 120
+}
+
+### Update Traces Retention Policy Only
+# Change only the traces retention period
+PUT {{baseUrl}}/api/v1/config/retention/policy
+Content-Type: application/json
+
+{
+    "data_type": "traces",
+    "ttl_days": 60
+}
+
+### Update Single Policy - Minimum Retention (1 day)
+PUT {{baseUrl}}/api/v1/config/retention/policy
+Content-Type: application/json
+
+{
+    "data_type": "logs",
+    "ttl_days": 1
+}
+
+### Update Single Policy - Maximum Retention (10 years)
+PUT {{baseUrl}}/api/v1/config/retention/policy
+Content-Type: application/json
+
+{
+    "data_type": "metrics",
+    "ttl_days": 3650
+}
+
+###############################################################################
+# DATA AGE METRICS (GET /api/v1/config/retention/metrics)
+###############################################################################
+
+### Get Data Age Metrics
+# Returns statistics about data age for all data types
+# Shows oldest/newest data, counts, and age in days
+GET {{baseUrl}}/api/v1/config/retention/metrics
+
+###############################################################################
+# ERROR CASES - VALIDATION FAILURES
+###############################################################################
+
+### Error: Zero TTL (400 Bad Request)
+# TTL must be at least 1 day
+PUT {{baseUrl}}/api/v1/config/retention/policy
+Content-Type: application/json
+
+{
+    "data_type": "logs",
+    "ttl_days": 0
+}
+
+### Error: TTL Exceeds Maximum (400 Bad Request)
+# TTL cannot exceed 3650 days (10 years)
+PUT {{baseUrl}}/api/v1/config/retention/policy
+Content-Type: application/json
+
+{
+    "data_type": "metrics",
+    "ttl_days": 3651
+}
+
+### Error: Zero TTL in Complete Config (400 Bad Request)
+PUT {{baseUrl}}/api/v1/config/retention
+Content-Type: application/json
+
+{
+    "logs": {
+        "data_type": "logs",
+        "ttl_days": 0
+    },
+    "metrics": {
+        "data_type": "metrics",
+        "ttl_days": 90
+    },
+    "traces": {
+        "data_type": "traces",
+        "ttl_days": 30
+    }
+}
+
+### Error: Excessive TTL in Complete Config (400 Bad Request)
+PUT {{baseUrl}}/api/v1/config/retention
+Content-Type: application/json
+
+{
+    "logs": {
+        "data_type": "logs",
+        "ttl_days": 30
+    },
+    "metrics": {
+        "data_type": "metrics",
+        "ttl_days": 5000
+    },
+    "traces": {
+        "data_type": "traces",
+        "ttl_days": 30
+    }
+}
+
+###############################################################################
+# NOTES AND BEST PRACTICES
+###############################################################################
+
+# IMPORTANT: Runtime Configuration vs. ClickHouse Schema TTL
+# 
+# The retention configuration set via these APIs is for monitoring and tracking
+# purposes. The actual data deletion is performed by ClickHouse based on the
+# TTL configured in the database schema.
+#
+# To sync the database schema TTL with your runtime configuration:
+#
+# ALTER TABLE logs MODIFY TTL toDateTime(timestamp / 1000000000) + INTERVAL 60 DAY;
+# ALTER TABLE metrics MODIFY TTL toDateTime(timestamp / 1000000000) + INTERVAL 180 DAY;
+# ALTER TABLE spans MODIFY TTL toDateTime(start_time / 1000000000) + INTERVAL 45 DAY;
+#
+# The data age monitoring background job will warn if data age exceeds the
+# configured retention policy, helping you identify when schema updates are needed.
+
+# RETENTION POLICY RECOMMENDATIONS:
+#
+# Logs:
+#   - Development: 7 days
+#   - Staging: 30 days
+#   - Production: 30-90 days
+#
+# Metrics:
+#   - Development: 30 days
+#   - Staging: 90 days
+#   - Production: 90-365 days
+#
+# Traces:
+#   - Development: 7 days
+#   - Staging: 30 days
+#   - Production: 30-90 days
+#
+# Consider using aggregated metrics for long-term retention (see materialized views).
+
+

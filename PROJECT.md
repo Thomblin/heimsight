@@ -580,21 +580,34 @@ Each task is designed to be completed in one session. Complete tasks in order, m
 ---
 
 #### Step 3.6: Retention & TTL
-**Status:** `[ ]` Pending
+**Status:** `[x]` Complete
 
 **Goal:** Automatic data expiration.
 
 **Tasks:**
-- Add retention configuration (per data type)
-- Implement TTL enforcement (background job)
-- Add API to configure retention policies
-- Add metrics for data age distribution
-- Write tests for TTL behavior
+- Add retention configuration (per data type) ✅
+- Implement TTL enforcement (background job) ✅
+- Add API to configure retention policies ✅
+- Add metrics for data age distribution ✅
+- Write tests for TTL behavior ✅
 
 **Acceptance Criteria:**
-- Old data is automatically deleted
-- Different TTLs for logs/metrics/traces
-- Configuration is runtime-updatable
+- Old data is automatically deleted ✅ (ClickHouse TTL)
+- Different TTLs for logs/metrics/traces ✅
+- Configuration is runtime-updatable ✅
+
+**Implementation Notes:**
+- Created `RetentionConfig` in `shared/config` module with per-data-type policies
+- Added three retention API endpoints: GET/PUT config, PUT single policy, GET metrics
+- Implemented `DataAgeMonitor` background job running hourly
+- Added `DataAgeMetrics` tracking for observability with oldest/newest timestamps
+- **Automatic TTL Updates**: API automatically executes ALTER TABLE statements in ClickHouse when retention policies change
+- ClickHouse handles automatic TTL enforcement at database level
+- Runtime config tracks intended retention and warns on age exceedance
+- Thread-safe config storage in `AppState` using `Arc<RwLock<>>`
+- Enhanced schema documentation with automatic TTL update information
+- Added `get_oldest_timestamp()` and `get_newest_timestamp()` methods to all store traits
+- All 293 tests passing (31 new tests added)
 
 ---
 

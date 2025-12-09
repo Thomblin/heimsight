@@ -21,6 +21,63 @@ The `clickhouse` Rust client has issues deserializing `DateTime64` types when us
 
 Partitioning and TTL expressions convert Int64 nanoseconds to DateTime using `toDateTime(timestamp / 1000000000)`.
 
+### Data Retention (TTL)
+
+Each table has a TTL (Time-To-Live) policy configured at the schema level:
+- **Logs**: 30 days (configurable in schema)
+- **Metrics**: 90 days (configurable in schema)
+- **Traces**: 30 days (configurable in schema)
+
+ClickHouse automatically deletes data older than the configured TTL. The TTL is enforced at the database level for efficiency and reliability.
+
+#### Runtime Retention Configuration
+
+Heimsight provides runtime retention configuration via the API (`/api/v1/config/retention`), which allows operators to:
+- View current retention policies
+- Update retention policies dynamically
+- Track data age metrics via `/api/v1/config/retention/metrics`
+
+**Automatic TTL Updates**: When using ClickHouse-backed storage, updating retention policies via the API automatically updates the database TTL using `ALTER TABLE` statements. The API will:
+
+1. Validate the new retention policy
+2. Execute `ALTER TABLE` commands to update ClickHouse TTL
+3. Update the runtime configuration
+4. Return success or error response
+
+Example API calls:
+
+```bash
+# Update all retention policies
+PUT /api/v1/config/retention
+{
+  "logs": { "data_type": "logs", "ttl_days": 60 },
+  "metrics": { "data_type": "metrics", "ttl_days": 180 },
+  "traces": { "data_type": "traces", "ttl_days": 45 }
+}
+
+# Update a single policy
+PUT /api/v1/config/retention/policy
+{
+  "data_type": "metrics",
+  "ttl_days": 180
+}
+```
+
+**Manual TTL Updates**: If needed, you can also manually update TTL directly in ClickHouse:
+
+```sql
+-- Example: Update logs table TTL to 60 days
+ALTER TABLE logs MODIFY TTL toDateTime(timestamp / 1000000000) + INTERVAL 60 DAY;
+
+-- Example: Update metrics table TTL to 180 days
+ALTER TABLE metrics MODIFY TTL toDateTime(timestamp / 1000000000) + INTERVAL 180 DAY;
+
+-- Example: Update spans table TTL to 45 days
+ALTER TABLE spans MODIFY TTL toDateTime(start_time / 1000000000) + INTERVAL 45 DAY;
+```
+
+**Monitoring**: The data age monitoring background job tracks the oldest and newest data timestamps and warns if data age exceeds the configured retention policy.
+
 ### Applying Schema
 
 To initialize the database:

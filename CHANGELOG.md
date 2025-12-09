@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Automatic ClickHouse TTL Updates**: Retention policy changes via API now automatically execute `ALTER TABLE` statements to update ClickHouse TTL
+- **Data Age Timestamps**: Added `get_oldest_timestamp()` and `get_newest_timestamp()` methods to all store traits (LogStore, MetricStore, TraceStore)
+- **Enhanced Data Age Metrics**: `/api/v1/config/retention/metrics` endpoint now returns actual oldest/newest timestamps (returns null when count is zero)
+- **ClickHouse Client Tracking**: `AppState` now tracks ClickHouse client availability for automatic TTL updates
 - Initial project scaffolding with Rust workspace structure
 - `api` crate: Axum-based API server with health check and log ingestion
   - `GET /health` endpoint returning service status, name, and version
@@ -157,6 +161,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `schema/README.md`: Schema documentation with design decisions and query examples
     - Updated README.md with database setup instructions
   - All 262 tests passing (including new database connectivity test)
+
+- **Retention Configuration & TTL Management**
+  - Runtime retention configuration system in `shared/config` module:
+    - `RetentionConfig` struct for managing TTL policies per data type (logs, metrics, traces)
+    - `RetentionPolicy` struct with validation (1-3650 days)
+    - `DataType` enum for type-safe policy management
+    - Default retention: logs (30 days), metrics (90 days), traces (30 days)
+  - API endpoints for retention management:
+    - `GET /api/v1/config/retention` - View current retention configuration
+    - `PUT /api/v1/config/retention` - Update complete retention configuration
+    - `PUT /api/v1/config/retention/policy` - Update a single data type's policy
+    - `GET /api/v1/config/retention/metrics` - Get data age metrics
+  - Data age monitoring and metrics:
+    - `DataAgeMonitor` background job running hourly
+    - `DataAgeMetrics` tracking oldest/newest data and counts per data type
+    - Automatic warnings when data age exceeds configured TTL
+    - Statistics exposed via metrics endpoint for observability
+  - Thread-safe retention configuration in `AppState` using `Arc<RwLock<RetentionConfig>>`
+  - Comprehensive test coverage:
+    - 14 unit tests for retention configuration structures
+    - 7 integration tests for retention API endpoints
+    - 12 unit tests for data age monitoring
+  - Enhanced schema documentation:
+    - Documented relationship between schema-level TTL and runtime configuration
+    - Added SQL examples for updating ClickHouse table TTL values
+    - Explained automatic TTL enforcement by ClickHouse
+  - All 293 tests passing (31 new tests added for retention features)
 
 ### Changed
 

@@ -182,6 +182,20 @@ pub trait TraceStore: Send + Sync {
     ///
     /// Returns an error if the clear operation fails.
     fn clear(&self) -> Result<(), TraceStoreError>;
+
+    /// Returns the timestamp of the oldest span in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, TraceStoreError>;
+
+    /// Returns the timestamp of the newest span in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation fails.
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, TraceStoreError>;
 }
 
 /// In-memory trace store implementation.
@@ -321,6 +335,16 @@ impl TraceStore for InMemoryTraceStore {
         let mut spans = self.spans.write().map_err(|_| TraceStoreError::LockError)?;
         spans.clear();
         Ok(())
+    }
+
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, TraceStoreError> {
+        let spans = self.spans.read().map_err(|_| TraceStoreError::LockError)?;
+        Ok(spans.values().flatten().map(|span| span.start_time).min())
+    }
+
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, TraceStoreError> {
+        let spans = self.spans.read().map_err(|_| TraceStoreError::LockError)?;
+        Ok(spans.values().flatten().map(|span| span.start_time).max())
     }
 }
 
@@ -777,6 +801,24 @@ impl TraceStore for ClickHouseTraceStore {
     fn clear(&self) -> Result<(), TraceStoreError> {
         let client = Arc::clone(&self.client);
         Self::block_on(async move { client.query("TRUNCATE TABLE spans").execute().await })
+    }
+
+    fn get_oldest_timestamp(&self) -> Result<Option<DateTime<Utc>>, TraceStoreError> {
+        let client = Arc::clone(&self.client);
+        Self::block_on(async move {
+            let sql = "SELECT min(start_time) FROM spans";
+            let result: Option<i64> = client.query(sql).fetch_optional::<i64>().await?;
+            Ok(result.map(DateTime::from_timestamp_nanos))
+        })
+    }
+
+    fn get_newest_timestamp(&self) -> Result<Option<DateTime<Utc>>, TraceStoreError> {
+        let client = Arc::clone(&self.client);
+        Self::block_on(async move {
+            let sql = "SELECT max(start_time) FROM spans";
+            let result: Option<i64> = client.query(sql).fetch_optional::<i64>().await?;
+            Ok(result.map(DateTime::from_timestamp_nanos))
+        })
     }
 }
 

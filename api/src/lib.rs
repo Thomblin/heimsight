@@ -29,6 +29,7 @@
 mod config;
 pub mod db;
 pub mod grpc;
+pub mod metrics;
 mod routes;
 mod state;
 
@@ -129,6 +130,15 @@ pub async fn run_server_with_config_and_state(config: Config, state: AppState) -
         "Heimsight API server starting"
     );
 
+    // Start data age monitoring background job
+    let monitor = std::sync::Arc::new(metrics::DataAgeMonitor::new(
+        state.clone(),
+        std::time::Duration::from_secs(3600), // Check every hour
+    ));
+    tokio::spawn(async move {
+        monitor.run().await;
+    });
+
     // Create HTTP server
     let app = create_router(state.clone());
     let listener = TcpListener::bind(http_addr).await?;
@@ -189,7 +199,8 @@ pub fn create_router(state: AppState) -> Router {
         .merge(routes::query_routes(state.clone()))
         .merge(routes::metrics_routes(state.clone()))
         .merge(routes::traces_routes(state.clone()))
-        .merge(routes::otlp_routes(state))
+        .merge(routes::otlp_routes(state.clone()))
+        .merge(routes::retention_routes(state))
         .layer(RequestBodyLimitLayer::new(MAX_BODY_SIZE))
         .layer(TraceLayer::new_for_http())
 }

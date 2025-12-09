@@ -80,8 +80,8 @@ watch-api:
 docs:
 	cargo doc --no-deps --open
 
-# connect to heimsight db
-heimsight-client:
+# connect to heimsight db (clickhouse)
+db-client:
 	docker exec -it heimsight-clickhouse clickhouse-client
 
 # Help

@@ -123,14 +123,133 @@ Environment variables:
 
 ## API Endpoints
 
-(Coming in future steps)
+### Core Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health` | Health check |
-| `POST` | `/api/v1/logs` | Ingest logs |
-| `GET` | `/api/v1/logs` | Query logs |
-| `POST` | `/api/v1/query` | SQL-like query |
+
+### Logs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/logs` | Ingest logs (single or batch) |
+| `GET` | `/api/v1/logs` | Query logs with filters |
+
+### Metrics
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/metrics` | Ingest metrics (single or batch) |
+| `GET` | `/api/v1/metrics` | Query metrics with filters |
+
+### Traces
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/traces` | Ingest spans (single or batch) |
+| `GET` | `/api/v1/traces` | Query traces with filters |
+| `GET` | `/api/v1/traces/{trace_id}` | Get a single trace by ID |
+
+### Query
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/v1/query` | Execute SQL-like queries |
+
+### Retention Configuration
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/config/retention` | Get current retention configuration |
+| `PUT` | `/api/v1/config/retention` | Update complete retention configuration |
+| `PUT` | `/api/v1/config/retention/policy` | Update a single retention policy |
+| `GET` | `/api/v1/config/retention/metrics` | Get data age metrics |
+
+### OTLP (OpenTelemetry Protocol)
+
+#### HTTP Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/v1/logs` | OTLP HTTP logs ingestion |
+| `POST` | `/v1/metrics` | OTLP HTTP metrics ingestion |
+| `POST` | `/v1/traces` | OTLP HTTP traces ingestion |
+
+#### gRPC Endpoints (Port 4317)
+
+| Service | Method | Description |
+|---------|--------|-------------|
+| `LogsService` | `Export` | OTLP gRPC logs ingestion |
+| `MetricsService` | `Export` | OTLP gRPC metrics ingestion |
+| `TraceService` | `Export` | OTLP gRPC traces ingestion |
+
+## Example Requests
+
+HTTP request examples are provided in the `examples/` directory for manual testing with REST Client extensions:
+
+- `examples/health.http` - Health check endpoint
+- `examples/logs.http` - Log ingestion and querying
+- `examples/metrics.http` - Metric ingestion and querying
+- `examples/traces.http` - Trace ingestion and querying
+- `examples/query.http` - SQL-like queries
+- `examples/config_retention.http` - Retention configuration management
+- `examples/otlp_logs.http` - OTLP log ingestion
+- `examples/otlp_metrics.http` - OTLP metric ingestion
+- `examples/otlp_traces.http` - OTLP trace ingestion
+
+These files work with the [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) extension for VS Code or IntelliJ's HTTP Client.
+
+## Data Retention & TTL Management
+
+Heimsight provides dynamic retention policy management with automatic TTL updates in ClickHouse:
+
+### Features
+
+- **Dynamic Configuration**: Update retention policies via API without restarting the server
+- **Automatic TTL Updates**: ClickHouse table TTLs are automatically updated when policies change
+- **Data Age Monitoring**: Track oldest/newest data timestamps for each data type
+- **Validation**: Policies are validated (1-3650 days) before applying
+
+### API Usage
+
+```bash
+# Get current retention configuration
+GET /api/v1/config/retention
+
+# Update all retention policies (automatically updates ClickHouse TTL)
+PUT /api/v1/config/retention
+{
+  "logs": { "data_type": "logs", "ttl_days": 60 },
+  "metrics": { "data_type": "metrics", "ttl_days": 180 },
+  "traces": { "data_type": "traces", "ttl_days": 45 }
+}
+
+# Update a single retention policy (automatically updates ClickHouse TTL)
+PUT /api/v1/config/retention/policy
+{
+  "data_type": "metrics",
+  "ttl_days": 180
+}
+
+# Get data age metrics (oldest/newest timestamps)
+GET /api/v1/config/retention/metrics
+```
+
+### Default Retention Periods
+
+- **Logs**: 30 days
+- **Metrics**: 90 days
+- **Traces**: 30 days
+
+### How It Works
+
+1. API validates the new retention policy (1-3650 days)
+2. Executes `ALTER TABLE` in ClickHouse to update TTL
+3. Updates runtime configuration
+4. Background monitor tracks data age and warns if TTL is exceeded
+
+See `examples/config_retention.http` for more examples.
 
 ## Development
 

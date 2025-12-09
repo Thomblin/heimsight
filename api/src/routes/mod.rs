@@ -10,6 +10,7 @@ mod logs;
 mod metrics;
 mod otlp;
 mod query;
+mod retention;
 mod traces;
 
 pub use health::health_routes;
@@ -37,4 +38,9 @@ pub fn traces_routes(state: AppState) -> Router {
 /// Creates OTLP routes with the given application state.
 pub fn otlp_routes(state: AppState) -> Router {
     otlp::otlp_routes(state)
+}
+
+/// Creates retention configuration routes with the given application state.
+pub fn retention_routes(state: AppState) -> Router {
+    retention::retention_routes(state)
 }
