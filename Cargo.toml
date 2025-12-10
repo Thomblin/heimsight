@@ -56,7 +56,7 @@ base64 = "0.22.1"
 
 # Protobuf JSON support
 pbjson = "0.8"
-pbjson-types = "0.8"
+pbjson-types = "0.9"
 
 # Database
 clickhouse = "0.14"
