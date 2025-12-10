@@ -55,7 +55,7 @@ tonic = "0.14"
 base64 = "0.22.1"
 
 # Protobuf JSON support
-pbjson = "0.8"
+pbjson = "0.9"
 pbjson-types = "0.8"
 
 # Database
