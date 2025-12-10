@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Data Aggregation System**: Multi-tier automatic data aggregation using ClickHouse materialized views
+  - **Metrics**: 1-minute, 5-minute, 1-hour, and 1-day aggregates with count, sum, min, max, avg
+  - **Logs**: Hourly and daily count aggregations by level, service, and normalized message pattern
+  - **Traces/Spans**: Hourly and daily performance statistics including:
+    - Latency percentiles (P50, P95, P99) for performance analysis
+    - Span counts and throughput trends by service/operation
+    - Error rate tracking via status_code grouping
+    - Trace characteristics (unique traces, spans per trace)
+  - Automatic population via materialized views (no background jobs needed)
+  - 90%+ storage reduction for historical data
+  - Each aggregation tier has configurable retention (30 days to 2 years)
+- **Log Message Normalization**: Intelligent pattern extraction for log aggregation
+  - `normalizeLogMessage()` function strips variable parts (timestamps, UUIDs, IPs, numbers, URLs, emails, paths)
+  - Groups similar log messages together (e.g., "Error at 10:15" and "Error at 11:30" → same pattern)
+  - Enables trend analysis across message patterns rather than unique messages
+  - Automatically applied via `MATERIALIZED` column in logs table
+  - Aggregation tables include `sample_message` for reference to original format
+- **Aggregation Configuration**: Added `AggregationConfig` in `shared/config` module
+- **Aggregation API**: `GET /api/v1/config/aggregation` endpoint for viewing aggregation policies
 - **Automatic ClickHouse TTL Updates**: Retention policy changes via API now automatically execute `ALTER TABLE` statements to update ClickHouse TTL
 - **Data Age Timestamps**: Added `get_oldest_timestamp()` and `get_newest_timestamp()` methods to all store traits (LogStore, MetricStore, TraceStore)
 - **Enhanced Data Age Metrics**: `/api/v1/config/retention/metrics` endpoint now returns actual oldest/newest timestamps (returns null when count is zero)

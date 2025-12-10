@@ -1,4 +1,4 @@
-.PHONY: all build test test-all run-api run-cli clean fmt lint check help
+.PHONY: all build test test-all run-api run-cli clean fmt lint check db-client db-schema db-test-normalization help
 
 # Default target
 all: check build test
@@ -80,9 +80,24 @@ watch-api:
 docs:
 	cargo doc --no-deps --open
 
-# connect to heimsight db (clickhouse)
+# Connect to ClickHouse database
 db-client:
-	docker exec -it heimsight-clickhouse clickhouse-client
+	docker exec -it heimsight-clickhouse clickhouse-client -d heimsight
+
+# Apply database schema
+db-schema:
+	@echo "Applying database schema..."
+	docker compose exec -T clickhouse clickhouse-client --multiquery < schema/00_functions.sql
+	docker compose exec -T clickhouse clickhouse-client --multiquery < schema/01_logs.sql
+	docker compose exec -T clickhouse clickhouse-client --multiquery < schema/02_metrics.sql
+	docker compose exec -T clickhouse clickhouse-client --multiquery < schema/03_traces.sql
+	docker compose exec -T clickhouse clickhouse-client --multiquery < schema/04_aggregations.sql
+	@echo "Schema applied successfully!"
+
+# Test message normalization function
+db-test-normalization:
+	@echo "Testing message normalization..."
+	docker compose exec -T clickhouse clickhouse-client --multiquery < schema/test_normalization.sql
 
 # Help
 help:
@@ -108,5 +123,7 @@ help:
 	@echo "  watch-test        Watch and run tests on changes"
 	@echo "  watch-api         Watch and run API on changes"
 	@echo "  docs              Build and open documentation"
-	@echo "  heimsight-client  Connect to heimsight database"
+	@echo "  db-client         Connect to ClickHouse database"
+	@echo "  db-schema         Apply database schema files"
+	@echo "  db-test-normalization  Test message normalization function"
 	@echo "  help              Show this help message"

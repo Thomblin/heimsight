@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS logs (
     -- Log metadata
     level LowCardinality(String) NOT NULL,
     message String NOT NULL,
+    normalized_message String MATERIALIZED normalizeLogMessage(message),
     service LowCardinality(String) NOT NULL,
 
     -- Flexible attributes stored as Map
@@ -22,7 +23,8 @@ CREATE TABLE IF NOT EXISTS logs (
 
     -- Indexing hints
     INDEX idx_trace_id trace_id TYPE bloom_filter GRANULARITY 1,
-    INDEX idx_message message TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1
+    INDEX idx_message message TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1,
+    INDEX idx_normalized normalized_message TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(toDateTime(timestamp / 1000000000))
 ORDER BY (service, level, timestamp)

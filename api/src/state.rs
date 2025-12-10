@@ -2,7 +2,7 @@
 //!
 //! Defines the shared application state that is passed to route handlers.
 
-use shared::config::RetentionConfig;
+use shared::config::{AggregationConfig, RetentionConfig};
 use shared::storage::{
     ClickHouseLogStore, ClickHouseMetricStore, ClickHouseTraceStore, InMemoryLogStore,
     InMemoryMetricStore, InMemoryTraceStore, LogStore, MetricStore, TraceStore,
@@ -24,6 +24,8 @@ pub struct AppState {
     trace_store: Arc<dyn TraceStore>,
     /// Retention configuration (TTL policies).
     retention_config: Arc<RwLock<RetentionConfig>>,
+    /// Aggregation configuration (downsampling policies).
+    aggregation_config: Arc<RwLock<AggregationConfig>>,
     /// Optional `ClickHouse` client for direct database operations.
     clickhouse_client: Option<Arc<clickhouse::Client>>,
 }
@@ -40,6 +42,7 @@ impl AppState {
             metric_store,
             trace_store,
             retention_config: Arc::new(RwLock::new(RetentionConfig::default())),
+            aggregation_config: Arc::new(RwLock::new(AggregationConfig::default())),
             clickhouse_client: None,
         }
     }
@@ -54,6 +57,7 @@ impl AppState {
             metric_store: Arc::new(InMemoryMetricStore::new()),
             trace_store: Arc::new(InMemoryTraceStore::new()),
             retention_config: Arc::new(RwLock::new(RetentionConfig::default())),
+            aggregation_config: Arc::new(RwLock::new(AggregationConfig::default())),
             clickhouse_client: None,
         }
     }
@@ -68,6 +72,7 @@ impl AppState {
             metric_store: Arc::new(ClickHouseMetricStore::new(Arc::clone(&client))),
             trace_store: Arc::new(ClickHouseTraceStore::new(Arc::clone(&client))),
             retention_config: Arc::new(RwLock::new(RetentionConfig::default())),
+            aggregation_config: Arc::new(RwLock::new(AggregationConfig::default())),
             clickhouse_client: Some(client),
         }
     }
@@ -113,6 +118,31 @@ impl AppState {
             .retention_config
             .write()
             .expect("Retention config lock poisoned") = config;
+    }
+
+    /// Gets the current aggregation configuration.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the aggregation config lock is poisoned.
+    #[must_use]
+    pub fn get_aggregation_config(&self) -> AggregationConfig {
+        self.aggregation_config
+            .read()
+            .expect("Aggregation config lock poisoned")
+            .clone()
+    }
+
+    /// Sets the aggregation configuration.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the aggregation config lock is poisoned.
+    pub fn set_aggregation_config(&self, config: AggregationConfig) {
+        *self
+            .aggregation_config
+            .write()
+            .expect("Aggregation config lock poisoned") = config;
     }
 
     /// Returns a reference to the `ClickHouse` client, if available.

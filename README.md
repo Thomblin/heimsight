@@ -19,6 +19,7 @@ Heimsight is currently in active development with core observability features fu
 - SQL-like query language for exploring data
 - ClickHouse persistent storage with automatic TTL
 - Dynamic retention policy management with automatic database updates
+- Multi-tier data aggregation for long-term storage efficiency
 - Data age monitoring and metrics
 - REST API with comprehensive filtering and pagination
 - Basic CLI for health checks
@@ -94,6 +95,9 @@ docker compose up -d clickhouse
 
 # Verify it's running
 docker ps | grep clickhouse
+
+# Apply database schema (includes message normalization function and aggregation tables)
+make db-schema
 
 # Check logs
 docker logs heimsight-clickhouse
@@ -223,6 +227,7 @@ HTTP request examples are provided in the `examples/` directory for manual testi
 - `examples/traces.http` - Trace ingestion and querying
 - `examples/query.http` - SQL-like queries
 - `examples/config_retention.http` - Retention configuration management
+- `examples/aggregation.http` - Aggregation configuration and queries
 - `examples/otlp_logs.http` - OTLP log ingestion
 - `examples/otlp_metrics.http` - OTLP metric ingestion
 - `examples/otlp_traces.http` - OTLP trace ingestion
@@ -280,6 +285,91 @@ GET /api/v1/config/retention/metrics
 
 See `examples/config_retention.http` for more examples.
 
+## Data Aggregation for Long-Term Storage
+
+Heimsight automatically aggregates data using ClickHouse materialized views, providing efficient long-term storage:
+
+### Features
+
+- **Automatic Downsampling**: Metrics are automatically aggregated at multiple time intervals
+- **Multi-Tier Storage**: Raw data → 1-minute → 5-minute → 1-hour → 1-day aggregates
+- **Storage Efficiency**: Reduces storage by 90%+ for historical data
+- **No Background Jobs**: ClickHouse materialized views handle aggregation in real-time
+- **Flexible Querying**: Query any aggregation level using SQL-like queries
+
+### Aggregation Tiers
+
+#### Metrics
+- **Raw data**: 90 days retention (full resolution)
+- **1-minute aggregates**: 30 days (count, sum, min, max, avg)
+- **5-minute aggregates**: 90 days
+- **1-hour aggregates**: 365 days
+- **1-day aggregates**: 730 days (2 years)
+
+#### Logs
+- **Raw logs**: 30 days retention (full text search)
+- **Hourly counts**: 365 days (by level, service, and message pattern)
+- **Daily counts**: 730 days (by level, service, and message pattern)
+
+**Message Normalization**: Log messages are automatically normalized to group similar patterns:
+```
+"Error at 2024-12-09T10:15:23Z: Connection to 192.168.1.1 failed (id: 12345)"
+"Error at 2024-12-09T11:30:45Z: Connection to 192.168.1.2 failed (id: 67890)"
+→ Both become: "Error at <TIMESTAMP>: Connection to <IP> failed (id: <NUM>)"
+```
+
+This enables pattern-based analysis: "How many times did this type of error occur?" instead of counting each unique message.
+
+#### Traces/Spans
+- **Raw spans**: 30 days retention (full trace details)
+- **Hourly span statistics**: 365 days (latency percentiles, throughput, error rates)
+- **Daily span statistics**: 730 days (p50/p95/p99 latencies, span counts)
+- **Hourly trace statistics**: 365 days (unique traces, total spans)
+- **Daily trace statistics**: 730 days (unique traces, total spans)
+
+**Performance Insights**: Span aggregations provide:
+- **Latency analysis**: P50, P95, P99 duration percentiles by service/operation
+- **Error rates**: Track failures over time
+- **Throughput trends**: Requests per hour/day by service
+- **Trace complexity**: Calculate average spans per trace (`total_spans / unique_traces`)
+
+### Querying Aggregated Data
+
+```bash
+# Query aggregated metrics
+POST /api/v1/query
+{
+  "query": "SELECT timestamp, avg FROM metrics_1hour WHERE name = 'cpu_usage' LIMIT 100"
+}
+
+# Query log volume trends
+POST /api/v1/query
+{
+  "query": "SELECT * FROM logs_1day_counts WHERE level = 'error' LIMIT 30"
+}
+
+# Query span latency percentiles
+POST /api/v1/query
+{
+  "query": "SELECT timestamp, service, operation, p95_duration_ns / 1000000 as p95_ms FROM spans_1hour_stats LIMIT 100"
+}
+
+# Find slowest operations
+POST /api/v1/query
+{
+  "query": "SELECT service, operation, avg(p99_duration_ns) / 1000000 as p99_ms FROM spans_1day_stats GROUP BY service, operation ORDER BY p99_ms DESC LIMIT 10"
+}
+```
+
+### Benefits
+
+1. **Cost Savings**: Dramatically reduced storage for historical data
+2. **Fast Queries**: Pre-aggregated data speeds up long-range queries
+3. **Automatic**: No manual intervention required
+4. **Flexible**: Query raw data for recent analysis, aggregates for trends
+
+See `examples/aggregation.http` for more examples and schema/04_aggregations.sql for implementation details.
+
 ## Architecture
 
 Heimsight uses a modular architecture:
@@ -308,7 +398,7 @@ This project follows Test-Driven Development (TDD). See `CLAUDE.md` for developm
 ### Running Tests
 
 ```bash
-# All tests (293 tests)
+# All tests (322 tests)
 cargo test
 
 # With output
@@ -320,6 +410,19 @@ cargo test -p shared
 
 # Integration tests only
 cargo test --test integration_tests
+```
+
+### Database Commands
+
+```bash
+# Apply database schema
+make db-schema
+
+# Test message normalization function
+make db-test-normalization
+
+# Connect to ClickHouse CLI
+make db-client
 ```
 
 ### Development Workflow

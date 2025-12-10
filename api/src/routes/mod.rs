@@ -5,6 +5,7 @@
 use crate::state::AppState;
 use axum::Router;
 
+mod aggregation;
 mod health;
 mod logs;
 mod metrics;
@@ -43,4 +44,9 @@ pub fn otlp_routes(state: AppState) -> Router {
 /// Creates retention configuration routes with the given application state.
 pub fn retention_routes(state: AppState) -> Router {
     retention::retention_routes(state)
+}
+
+/// Creates aggregation configuration routes with the given application state.
+pub fn aggregation_routes(state: AppState) -> Router {
+    aggregation::aggregation_routes(state)
 }

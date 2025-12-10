@@ -1,0 +1,234 @@
+# Heimsight API - Aggregation Configuration Examples
+# Use with VS Code REST Client extension or IntelliJ HTTP Client
+
+@baseUrl = http://localhost:8080
+
+###############################################################################
+# AGGREGATION CONFIGURATION
+###############################################################################
+
+### Get Current Aggregation Configuration
+# Returns the current aggregation policies for automatic data downsampling
+GET {{baseUrl}}/api/v1/config/aggregation
+
+###############################################################################
+# AGGREGATION OVERVIEW
+###############################################################################
+
+# Heimsight uses ClickHouse materialized views for automatic data aggregation.
+# This provides multi-tier storage:
+#
+# METRICS AGGREGATION:
+# - Raw data → 90 days (from retention config)
+# - 1-minute aggregates → 30 days
+# - 5-minute aggregates → 90 days
+# - 1-hour aggregates → 365 days
+# - 1-day aggregates → 730 days (2 years)
+#
+# LOG AGGREGATION:
+# - Raw logs → 30 days (from retention config)
+# - 1-hour log counts (by level/service) → 365 days
+# - 1-day log counts (by level/service) → 730 days
+#
+# TRACES:
+# - Raw spans → 30 days (from retention config)
+# - 1-hour span statistics → 365 days (latency percentiles, throughput, error rates)
+# - 1-day span statistics → 730 days (2 years)
+# - 1-hour trace statistics → 365 days (unique traces, spans per trace)
+# - 1-day trace statistics → 730 days
+
+###############################################################################
+# QUERYING AGGREGATED DATA
+###############################################################################
+
+# Aggregated data is stored in separate tables that you can query directly:
+
+### Query 1-Minute Aggregated Metrics
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT * FROM metrics_1min WHERE name = 'cpu_usage' LIMIT 100"
+# }
+
+### Query 1-Hour Aggregated Metrics
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT * FROM metrics_1hour WHERE service = 'api' LIMIT 100"
+# }
+
+### Query 1-Day Aggregated Metrics
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT * FROM metrics_1day WHERE name = 'requests' LIMIT 30"
+# }
+
+### Query 1-Hour Log Counts (by normalized message)
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT timestamp, level, service, normalized_message, count, sample_message FROM logs_1hour_counts WHERE level = 'error' ORDER BY count DESC LIMIT 100"
+# }
+
+### Query 1-Day Log Counts (by normalized message)
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT timestamp, service, normalized_message, sum(count) as total_count FROM logs_1day_counts WHERE service = 'api' GROUP BY timestamp, service, normalized_message ORDER BY total_count DESC LIMIT 30"
+# }
+
+### Query Most Common Error Patterns
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT normalized_message, sum(count) as occurrences, any(sample_message) as example FROM logs_1day_counts WHERE level = 'error' AND timestamp >= now() - INTERVAL 7 DAY GROUP BY normalized_message ORDER BY occurrences DESC LIMIT 10"
+# }
+
+### Query 1-Hour Span Performance Stats
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT timestamp, service, operation, avg_duration_ns / 1000000 as avg_ms, p95_duration_ns / 1000000 as p95_ms, span_count FROM spans_1hour_stats WHERE service = 'api' ORDER BY timestamp DESC LIMIT 100"
+# }
+
+### Query 1-Day Span Error Rates
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT timestamp, service, operation, countIf(status_code != 'OK') as errors, count() as total, (errors / total) * 100 as error_rate_pct FROM spans_1day_stats WHERE timestamp >= now() - INTERVAL 30 DAY GROUP BY timestamp, service, operation HAVING error_rate_pct > 1.0 ORDER BY error_rate_pct DESC"
+# }
+
+### Query Trace Statistics
+# GET {{baseUrl}}/api/v1/query
+# Content-Type: application/json
+#
+# {
+#   "query": "SELECT timestamp, service, unique_traces, total_spans, total_spans / unique_traces as avg_spans_per_trace FROM traces_1day_stats WHERE service = 'api' ORDER BY timestamp DESC LIMIT 30"
+# }
+
+###############################################################################
+# AGGREGATION TABLES IN CLICKHOUSE
+###############################################################################
+
+# The following tables are automatically populated by materialized views:
+#
+# METRICS:
+# - metrics_1min: 1-minute aggregates (count, sum, min, max, avg)
+# - metrics_5min: 5-minute aggregates
+# - metrics_1hour: 1-hour aggregates
+# - metrics_1day: 1-day aggregates
+#
+# LOGS:
+# - logs_1hour_counts: Hourly log counts by level, service, and normalized message
+# - logs_1day_counts: Daily log counts by level, service, and normalized message
+#
+# Log messages are automatically normalized to group similar messages:
+#   "Error at 2024-12-09 10:15:23" and "Error at 2024-12-09 11:30:45" 
+#   both become: "Error at <TIMESTAMP>"
+#
+# TRACES/SPANS:
+# - spans_1hour_stats: Hourly span performance (avg, p50, p95, p99 latency, throughput)
+# - spans_1day_stats: Daily span performance statistics
+# - traces_1hour_stats: Hourly trace statistics (unique traces, spans per trace)
+# - traces_1day_stats: Daily trace statistics
+#
+# Each aggregated table has its own TTL (see schema/04_aggregations.sql)
+
+###############################################################################
+# MANUAL AGGREGATION QUERIES
+###############################################################################
+
+# You can also query aggregations directly in ClickHouse:
+
+### Example: Get Hourly CPU Usage Average for Last 7 Days
+# SELECT
+#     timestamp,
+#     service,
+#     avg
+# FROM metrics_1hour
+# WHERE name = 'cpu_usage'
+#   AND timestamp >= now() - INTERVAL 7 DAY
+# ORDER BY timestamp DESC
+
+### Example: Get Daily Error Log Counts by Pattern
+# SELECT
+#     timestamp,
+#     service,
+#     normalized_message,
+#     sum(count) as total_errors,
+#     any(sample_message) as example_message
+# FROM logs_1day_counts
+# WHERE level = 'error'
+#   AND timestamp >= now() - INTERVAL 30 DAY
+# GROUP BY timestamp, service, normalized_message
+# ORDER BY total_errors DESC
+
+### Example: Find Most Common Error Messages
+# SELECT
+#     normalized_message,
+#     sum(count) as occurrences,
+#     any(sample_message) as example
+# FROM logs_1day_counts
+# WHERE level = 'error'
+#   AND timestamp >= now() - INTERVAL 7 DAY
+# GROUP BY normalized_message
+# ORDER BY occurrences DESC
+# LIMIT 20
+
+### Example: Analyze Span Latency Trends
+# SELECT
+#     toDate(timestamp) as date,
+#     service,
+#     operation,
+#     avg(avg_duration_ns) / 1000000 as avg_ms,
+#     avg(p95_duration_ns) / 1000000 as p95_ms,
+#     avg(p99_duration_ns) / 1000000 as p99_ms
+# FROM spans_1day_stats
+# WHERE timestamp >= now() - INTERVAL 30 DAY
+# GROUP BY date, service, operation
+# ORDER BY date DESC, p95_ms DESC
+
+### Example: Find Slowest Operations
+# SELECT
+#     service,
+#     operation,
+#     avg(p99_duration_ns) / 1000000 as p99_ms,
+#     sum(span_count) as total_spans
+# FROM spans_1day_stats
+# WHERE timestamp >= now() - INTERVAL 7 DAY
+# GROUP BY service, operation
+# ORDER BY p99_ms DESC
+# LIMIT 10
+
+### Example: Calculate Error Rates by Service
+# SELECT
+#     service,
+#     operation,
+#     countIf(status_code != 'OK') as error_count,
+#     sum(span_count) as total_count,
+#     (error_count / total_count) * 100 as error_rate_pct
+# FROM spans_1day_stats
+# WHERE timestamp >= now() - INTERVAL 7 DAY
+# GROUP BY service, operation
+# HAVING error_rate_pct > 1.0
+# ORDER BY error_rate_pct DESC
+
+###############################################################################
+# NOTES
+###############################################################################
+
+# 1. Materialized views automatically populate aggregation tables
+# 2. No manual aggregation job needed - ClickHouse handles this
+# 3. Aggregated data is automatically cleaned up based on TTL
+# 4. Aggregation reduces storage costs while maintaining queryability
+# 5. Use aggregated tables for dashboards and long-term trend analysis
+
