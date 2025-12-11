@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ClickHouse Aggregation Integration Tests**: Comprehensive test suite for ClickHouse materialized views
+  - Tests for metrics aggregation tables (`metrics_1min`, `metrics_5min`, `metrics_1hour`, `metrics_1day`)
+  - Tests for log count aggregation tables (`logs_1hour_counts`, `logs_1day_counts`)
+  - Tests for span statistics tables (`spans_1hour_stats`, `spans_1day_stats`)
+  - Tests for trace statistics tables (`traces_1hour_stats`, `traces_1day_stats`)
+  - Tests verify aggregation correctness: count, sum, min, max, avg values
+  - Tests verify service-level grouping and status code aggregation
+  - Tests verify normalized message grouping for log patterns
+  - Added ClickHouse test helpers: `create_clickhouse_client()`, `test_app_with_clickhouse()`
+  - All tests marked with `#[ignore = "requires running ClickHouse instance"]`
+  - Run with: `cargo test -- --ignored`
 - **Data Aggregation System**: Multi-tier automatic data aggregation using ClickHouse materialized views
   - **Metrics**: 1-minute, 5-minute, 1-hour, and 1-day aggregates with count, sum, min, max, avg
   - **Logs**: Hourly and daily count aggregations by level, service, and normalized message pattern

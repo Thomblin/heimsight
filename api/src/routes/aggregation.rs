@@ -104,4 +104,3 @@ mod tests {
         assert_eq!(config.one_hour.retention_days, 365);
     }
 }
-

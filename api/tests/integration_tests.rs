@@ -4,6 +4,7 @@
 //! logs, metrics, and traces through the HTTP API and gRPC.
 //!
 //! Tests are organized into separate modules:
+//! - `aggregation_tests` - ClickHouse aggregation/materialized views (requires ClickHouse)
 //! - `logs_tests` - Log ingestion and querying
 //! - `query_tests` - SQL-like query functionality
 //! - `metrics_tests` - Metrics ingestion and aggregation
@@ -12,6 +13,7 @@
 //! - `grpc_tests` - OTLP gRPC service integration tests
 
 mod integration_tests {
+    pub mod aggregation_tests;
     pub mod common;
     pub mod grpc_tests;
     pub mod health_tests;

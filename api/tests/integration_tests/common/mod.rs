@@ -9,6 +9,7 @@ use axum::http::{header, Request, StatusCode};
 use axum::Router;
 use http_body_util::BodyExt;
 use serde_json::Value;
+use std::sync::Arc;
 
 /// Creates a test router with fresh in-memory stores.
 ///
@@ -17,6 +18,43 @@ use serde_json::Value;
 /// A tuple containing the configured router and the app state.
 pub fn test_app() -> (Router, AppState) {
     let state = AppState::with_in_memory_store();
+    let router = create_router(state.clone());
+    (router, state)
+}
+
+/// Creates a ClickHouse client for integration tests.
+///
+/// Uses default test database configuration:
+/// - URL: <http://localhost:8123>
+/// - Database: heimsight
+/// - User: heimsight
+/// - Password: `heimsight_dev`
+///
+/// # Panics
+///
+/// Panics if ClickHouse is not available.
+pub fn create_clickhouse_client() -> Arc<clickhouse::Client> {
+    let client = clickhouse::Client::default()
+        .with_url("http://localhost:8123")
+        .with_database("heimsight")
+        .with_user("heimsight")
+        .with_password("heimsight_dev");
+
+    Arc::new(client)
+}
+
+/// Creates a test router with ClickHouse-backed stores.
+///
+/// # Returns
+///
+/// A tuple containing the configured router and the app state.
+///
+/// # Note
+///
+/// Requires a running ClickHouse instance.
+pub fn test_app_with_clickhouse() -> (Router, AppState) {
+    let client = create_clickhouse_client();
+    let state = AppState::with_clickhouse_store(client);
     let router = create_router(state.clone());
     (router, state)
 }

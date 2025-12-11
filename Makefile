@@ -16,10 +16,11 @@ test:
 	cargo test
 
 # Run all tests including database integration tests
+# Uses --test-threads=1 for aggregation tests to avoid race conditions with shared database
 test-all:
 	docker compose up -d
 	sleep 2
-	cargo test -- --include-ignored
+	cargo test -- --include-ignored --test-threads=1
 
 # Run tests with output
 test-verbose:
