@@ -31,4 +31,4 @@ tokio-test = { workspace = true }
 
 [build-dependencies]
 tonic-prost-build = "0.14"
-pbjson-build = "0.8"
+pbjson-build = "0.9"
